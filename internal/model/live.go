@@ -27,7 +27,7 @@ const (
 	defaultAuthURL  = "https://main.futureforex.co.za"
 	defaultAuthOrin = "https://account.futureforex.co.za" // Origin/Referer the API expects
 	csrfPath        = "/api/auth/get-csrf-token/"
-	loginPath       = "/api/auth/login/"
+	loginPath       = "/api/auth/login/" // OTP completes by re-POSTing here with otp_token/otp_method
 )
 
 // LiveSource pulls cycles live from the brokerage API. Fetch reads the
@@ -43,6 +43,19 @@ type LiveSource struct {
 	// Credentials for the login flow, used when Token is empty.
 	Username string
 	Password string
+
+	// OTPFunc is called when the account requires an OTP: it receives the
+	// server's message and the offered channels and must return the code the
+	// user enters. If nil, an OTP-required login fails with an explanatory error.
+	// Only wire this to an interactive prompt before the alt-screen UI starts —
+	// it reads from the terminal.
+	OTPFunc func(detail string, channels []string) (string, error)
+}
+
+// otpChallenge describes an OTP the login endpoint is waiting for.
+type otpChallenge struct {
+	detail   string
+	channels []string
 }
 
 // NewLiveSource builds a source from the environment:
@@ -73,6 +86,12 @@ func NewLiveSource() *LiveSource {
 		Password: os.Getenv("FF_PASSWORD"),
 	}
 }
+
+// EnsureToken mints the auth token if one isn't already set, running the full
+// CSRF + login flow (including any OTP prompt via OTPFunc). Call it before the
+// alt-screen UI starts so an OTP prompt lands on the terminal. A no-op when a
+// token is already configured (e.g. FF_TOKEN).
+func (s *LiveSource) EnsureToken(ctx context.Context) error { return s.ensureToken(ctx) }
 
 // ensureToken mints a fresh token from credentials when none is configured. A
 // no-op if a token is already present.
@@ -133,13 +152,63 @@ func (s *LiveSource) fetchCSRF(ctx context.Context, client *http.Client) (string
 	return out.CSRFToken, nil
 }
 
-// login performs step 2: POST credentials with the CSRF header and returns the
-// arb_auth_token used against the data API.
+// login performs step 2: POST credentials and return the arb_auth_token. When
+// the account has OTP enabled the first POST comes back as error.otp_required
+// (the server sends a code to the user's phone); it then asks OTPFunc for the
+// code, verifies it, and completes the login.
 func (s *LiveSource) login(ctx context.Context, client *http.Client, csrf string) (string, error) {
-	body, _ := json.Marshal(map[string]string{"username": s.Username, "password": s.Password})
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, s.AuthURL+loginPath, bytes.NewReader(body))
+	token, otp, err := s.attemptLogin(ctx, client, csrf, "", "")
 	if err != nil {
 		return "", err
+	}
+	if otp == nil {
+		return token, nil // no OTP needed
+	}
+
+	if s.OTPFunc == nil {
+		ch := strings.Join(otp.channels, "/")
+		return "", fmt.Errorf("login requires an OTP (%s): %s — run fftui in an interactive terminal to enter it", ch, otp.detail)
+	}
+	code, err := s.OTPFunc(otp.detail, otp.channels)
+	if err != nil {
+		return "", fmt.Errorf("OTP entry: %w", err)
+	}
+	code = strings.TrimSpace(code)
+	if code == "" {
+		return "", fmt.Errorf("no OTP code entered")
+	}
+
+	// The OTP is completed by re-submitting the login with otp_token/otp_method;
+	// the pending session cookie from the first attempt ties the two together.
+	method := "whatsapp"
+	if len(otp.channels) > 0 {
+		method = otp.channels[0]
+	}
+	token, otp, err = s.attemptLogin(ctx, client, csrf, code, method)
+	if err != nil {
+		return "", err
+	}
+	if otp != nil {
+		return "", fmt.Errorf("OTP not accepted — check the code and try again")
+	}
+	if token == "" {
+		return "", fmt.Errorf("login did not complete after OTP verification")
+	}
+	return token, nil
+}
+
+// attemptLogin POSTs the credentials (optionally with an OTP), returning the
+// token on success or a non-nil otpChallenge when the API asks for an OTP.
+func (s *LiveSource) attemptLogin(ctx context.Context, client *http.Client, csrf, otpToken, otpMethod string) (string, *otpChallenge, error) {
+	payload := map[string]string{"username": s.Username, "password": s.Password}
+	if otpToken != "" {
+		payload["otp_token"] = otpToken
+		payload["otp_method"] = otpMethod
+	}
+	body, _ := json.Marshal(payload)
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, s.AuthURL+loginPath, bytes.NewReader(body))
+	if err != nil {
+		return "", nil, err
 	}
 	s.setBrowserHeaders(req)
 	req.Header.Set("Content-Type", "application/json")
@@ -147,29 +216,34 @@ func (s *LiveSource) login(ctx context.Context, client *http.Client, csrf string
 
 	resp, err := client.Do(req)
 	if err != nil {
-		return "", fmt.Errorf("login request: %w", err)
+		return "", nil, fmt.Errorf("login request: %w", err)
 	}
 	defer resp.Body.Close()
 	raw, _ := io.ReadAll(resp.Body)
-	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		return "", fmt.Errorf("login %s: %s", resp.Status, strings.TrimSpace(string(raw)))
-	}
+	return parseLoginResponse(resp.StatusCode, raw)
+}
 
-	var out struct {
-		ArbAuthToken string `json:"arb_auth_token"`
-		ValidArbSess bool   `json:"valid_arb_session"`
-		OTPStatus    string `json:"otp_status"`
+// parseLoginResponse interprets a login POST: the arb_auth_token on success, a
+// non-nil otpChallenge when the API returns error.otp_required, or an error.
+func parseLoginResponse(status int, raw []byte) (string, *otpChallenge, error) {
+	var body struct {
+		ArbAuthToken string   `json:"arb_auth_token"`
+		Detail       string   `json:"detail"`
+		Type         string   `json:"type"`
+		OTPChannels  []string `json:"otp_channels"`
 	}
-	if err := json.Unmarshal(raw, &out); err != nil {
-		return "", fmt.Errorf("decode login response: %w", err)
+	_ = json.Unmarshal(raw, &body)
+
+	if body.Type == "error.otp_required" {
+		return "", &otpChallenge{detail: body.Detail, channels: body.OTPChannels}, nil
 	}
-	if out.OTPStatus != "" && out.OTPStatus != "disabled" {
-		return "", fmt.Errorf("login requires OTP (otp_status=%q) — not supported", out.OTPStatus)
+	if status < 200 || status >= 300 {
+		return "", nil, fmt.Errorf("login failed (%d): %s", status, strings.TrimSpace(string(raw)))
 	}
-	if out.ArbAuthToken == "" {
-		return "", fmt.Errorf("login succeeded but no arb_auth_token in response: %s", strings.TrimSpace(string(raw)))
+	if body.ArbAuthToken == "" {
+		return "", nil, fmt.Errorf("login succeeded but no arb_auth_token in response: %s", strings.TrimSpace(string(raw)))
 	}
-	return out.ArbAuthToken, nil
+	return body.ArbAuthToken, nil, nil
 }
 
 // setBrowserHeaders adds the Origin/Referer/Accept the API's CSRF/CORS checks

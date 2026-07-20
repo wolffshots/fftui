@@ -64,6 +64,9 @@ your cycles. Alternatively set `FF_TOKEN` to a still-valid token to skip login
 auto-detected from the account after login; set `FF_CLIENT_ID` only to override
 it (or if the account has more than one client).
 
+If the account has OTP enabled, fftui prompts for the code (sent via WhatsApp/SMS)
+on the terminal before the UI opens.
+
 ### Live-source environment variables
 
 | Var | Default | Purpose |

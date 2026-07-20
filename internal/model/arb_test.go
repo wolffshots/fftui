@@ -59,6 +59,39 @@ func TestFlexFloatHandlesStringOrNumber(t *testing.T) {
 	}
 }
 
+// TestParseLoginResponse covers the three login outcomes: OTP required, a token,
+// and an error.
+func TestParseLoginResponse(t *testing.T) {
+	// OTP required (the real 401 body).
+	otpBody := `{"detail":"We have sent an OTP via WhatsApp to +27 ***** 9251","type":"error.otp_required","otp_channels":["whatsapp","sms"]}`
+	tok, otp, err := parseLoginResponse(401, []byte(otpBody))
+	if err != nil || tok != "" || otp == nil {
+		t.Fatalf("otp case: tok=%q otp=%v err=%v", tok, otp, err)
+	}
+	if len(otp.channels) != 2 || otp.channels[0] != "whatsapp" || otp.channels[1] != "sms" {
+		t.Errorf("otp channels = %v", otp.channels)
+	}
+	if otp.detail == "" {
+		t.Error("otp detail should be populated")
+	}
+
+	// Success.
+	tok, otp, err = parseLoginResponse(200, []byte(`{"arb_auth_token":"tok_abc","valid_arb_session":true}`))
+	if err != nil || otp != nil || tok != "tok_abc" {
+		t.Fatalf("success case: tok=%q otp=%v err=%v", tok, otp, err)
+	}
+
+	// Bad credentials → error, not an OTP challenge.
+	if _, otp, err := parseLoginResponse(401, []byte(`{"detail":"Invalid credentials"}`)); err == nil || otp != nil {
+		t.Errorf("bad-creds case should error: otp=%v err=%v", otp, err)
+	}
+
+	// 200 but no token → error.
+	if _, _, err := parseLoginResponse(200, []byte(`{"valid_arb_session":true}`)); err == nil {
+		t.Error("missing-token case should error")
+	}
+}
+
 // TestFetchMarketConditionsRejectsBadPeriod avoids a doomed network round-trip.
 func TestFetchMarketConditionsRejectsBadPeriod(t *testing.T) {
 	s := NewLiveSource()

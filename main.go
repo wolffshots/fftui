@@ -1,10 +1,13 @@
 package main
 
 import (
+	"bufio"
+	"context"
 	"flag"
 	"fmt"
 	"os"
 	"strconv"
+	"strings"
 
 	tea "github.com/charmbracelet/bubbletea"
 
@@ -37,7 +40,16 @@ func main() {
 	if *csvPath != "" {
 		source = model.NewCSVSource(*csvPath)
 	} else {
-		source = model.NewLiveSource()
+		live := model.NewLiveSource()
+		// Authenticate up front so an OTP prompt (if the account requires one)
+		// happens here on the terminal rather than inside the alt-screen UI.
+		live.OTPFunc = promptOTP
+		if err := live.EnsureToken(context.Background()); err != nil {
+			fmt.Fprintln(os.Stderr, "login failed:", err)
+			os.Exit(1)
+		}
+		live.OTPFunc = nil // never prompt from inside the running UI
+		source = live
 	}
 
 	now := ui.Today()
@@ -49,6 +61,24 @@ func main() {
 		fmt.Fprintln(os.Stderr, "error:", err)
 		os.Exit(1)
 	}
+}
+
+// promptOTP asks the user for the OTP the API just sent (via WhatsApp/SMS) and
+// returns the entered code. Reads a line from stdin, so it must run before the
+// alt-screen UI takes over the terminal.
+func promptOTP(detail string, channels []string) (string, error) {
+	if detail != "" {
+		fmt.Println(detail)
+	}
+	if len(channels) > 0 {
+		fmt.Printf("(sent via %s) ", strings.Join(channels, "/"))
+	}
+	fmt.Print("Enter OTP code: ")
+	line, err := bufio.NewReader(os.Stdin).ReadString('\n')
+	if err != nil {
+		return "", err
+	}
+	return strings.TrimSpace(line), nil
 }
 
 // envPct reads a percentage from an env var (e.g. "6" or "41.5"), falling back
