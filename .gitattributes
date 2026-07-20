@@ -1,0 +1,4 @@
+# Keep shell scripts and VHS tapes LF-only so they work in WSL/Linux even when
+# edited or checked out on Windows.
+*.sh   text eol=lf
+*.tape text eol=lf
