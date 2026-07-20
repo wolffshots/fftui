@@ -180,6 +180,7 @@ func (s *LiveSource) authGet(ctx context.Context, path string) ([]byte, error) {
 	raw, err := s.rawGet(ctx, path)
 	if errors.Is(err, errUnauthorized) && s.Username != "" && s.Password != "" {
 		s.Token = ""
+		clearToken(tokenCacheFile(s.Username)) // the cached token is stale
 		if err = s.ensureToken(ctx); err != nil {
 			return nil, err
 		}

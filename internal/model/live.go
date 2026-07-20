@@ -93,6 +93,10 @@ func NewLiveSource() *LiveSource {
 // token is already configured (e.g. FF_TOKEN).
 func (s *LiveSource) EnsureToken(ctx context.Context) error { return s.ensureToken(ctx) }
 
+// Logout removes this account's cached token so the next run logs in afresh
+// (re-prompting for an OTP if the account needs one). No-op if nothing is cached.
+func (s *LiveSource) Logout() { clearToken(tokenCacheFile(s.Username)) }
+
 // ensureToken mints a fresh token from credentials when none is configured. A
 // no-op if a token is already present.
 func (s *LiveSource) ensureToken(ctx context.Context) error {
@@ -101,6 +105,13 @@ func (s *LiveSource) ensureToken(ctx context.Context) error {
 	}
 	if s.Username == "" || s.Password == "" {
 		return fmt.Errorf("no FF_TOKEN set and no FF_USERNAME/PASSWORD to mint one")
+	}
+
+	// Reuse a cached token when one is still fresh — skips login (and any OTP).
+	cacheFile := tokenCacheFile(s.Username)
+	if tok, ok := loadToken(cacheFile, time.Now()); ok {
+		s.Token = tok
+		return nil
 	}
 
 	// A dedicated client with a cookie jar so the csrftoken cookie set by the
@@ -124,6 +135,7 @@ func (s *LiveSource) ensureToken(ctx context.Context) error {
 		return err
 	}
 	s.Token = token
+	saveToken(cacheFile, token, time.Now()) // persist for the next run
 	return nil
 }
 

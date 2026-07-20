@@ -65,7 +65,9 @@ auto-detected from the account after login; set `FF_CLIENT_ID` only to override
 it (or if the account has more than one client).
 
 If the account has OTP enabled, fftui prompts for the code (sent via WhatsApp/SMS)
-on the terminal before the UI opens.
+on the terminal before the UI opens. The minted token is then cached (in your OS
+cache dir, ~1h TTL) so later runs skip login — and the OTP — until it expires;
+`fftui --logout` clears it.
 
 ### Live-source environment variables
 

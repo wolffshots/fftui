@@ -28,10 +28,17 @@ func main() {
 	idlePct := flag.Float64("idle-rate", envPct("FF_IDLE_RATE", 6.0), "annual % earned on idle cash (non-trading days); tracks the reserve bank rate")
 	taxPct := flag.Float64("tax-rate", envPct("FF_TAX_RATE", 41.0), "marginal tax % applied to returns for the effective (net) figure")
 	showVersion := flag.Bool("version", false, "print version and exit")
+	logout := flag.Bool("logout", false, "clear the cached login token and exit")
 	flag.Parse()
 
 	if *showVersion {
 		fmt.Println("fftui", version)
+		return
+	}
+
+	if *logout {
+		model.NewLiveSource().Logout()
+		fmt.Println("cached login token cleared")
 		return
 	}
 
