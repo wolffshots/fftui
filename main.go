@@ -13,6 +13,9 @@ import (
 	"github.com/wolffshots/fftui/internal/ui"
 )
 
+// version is overridden at release build time via -ldflags "-X main.version=…".
+var version = "dev"
+
 func main() {
 	// Load credentials/config from a .env file first (real env vars still win),
 	// so FF_IDLE_RATE can seed the flag default.
@@ -21,7 +24,13 @@ func main() {
 	csvPath := flag.String("csv", "", "read cycles from a CSV file instead of the live API")
 	idlePct := flag.Float64("idle-rate", envPct("FF_IDLE_RATE", 6.0), "annual % earned on idle cash (non-trading days); tracks the reserve bank rate")
 	taxPct := flag.Float64("tax-rate", envPct("FF_TAX_RATE", 41.0), "marginal tax % applied to returns for the effective (net) figure")
+	showVersion := flag.Bool("version", false, "print version and exit")
 	flag.Parse()
+
+	if *showVersion {
+		fmt.Println("fftui", version)
+		return
+	}
 
 	// Selection logic (§3): --csv → CSVSource, otherwise the live API source.
 	var source model.CycleSource

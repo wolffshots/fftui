@@ -50,7 +50,7 @@ type LiveSource struct {
 //	FF_TOKEN      a token ("<t>" or "Token <t>"); skips login if set
 //	FF_USERNAME   \ used to mint a token via the CSRF login flow
 //	FF_PASSWORD   /
-//	FF_CLIENT_ID  client id in /api/cycle_list/<id>/ (required for live)
+//	FF_CLIENT_ID  client id in /api/cycle_list/<id>/ (optional; auto-detected)
 //	FF_BASE_URL   data host   (default https://srv.futureforex.co.za)
 //	FF_AUTH_URL   auth host   (default https://main.futureforex.co.za)
 func NewLiveSource() *LiveSource {
@@ -197,7 +197,7 @@ var errUnauthorized = errors.New("unauthorized")
 // the --csv file. authGet re-mints the token once on a 401 so the app's `r`
 // refresh still recovers from the ~hourly token expiry.
 func (s *LiveSource) Fetch(ctx context.Context) ([]Cycle, error) {
-	id, err := s.requireClientID()
+	id, err := s.resolveClientID(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -208,13 +208,53 @@ func (s *LiveSource) Fetch(ctx context.Context) ([]Cycle, error) {
 	return parseCSV(bytes.NewReader(raw))
 }
 
-// requireClientID returns the configured client id, or a clear error when it is
-// unset (it identifies your account in the client-scoped endpoints).
-func (s *LiveSource) requireClientID() (string, error) {
-	if s.ClientID == "" {
-		return "", fmt.Errorf("no FF_CLIENT_ID set (your client id from the dashboard URL)")
+// resolveClientID returns the client id for the account-scoped endpoints. When
+// FF_CLIENT_ID is set it is used as-is; otherwise it is discovered from the
+// account's client_list/ after login and cached on the source. Accounts with no
+// arbitrage client — or more than one — return an error asking for FF_CLIENT_ID.
+func (s *LiveSource) resolveClientID(ctx context.Context) (string, error) {
+	if s.ClientID != "" {
+		return s.ClientID, nil
 	}
-	return s.ClientID, nil
+	raw, err := s.authGet(ctx, "/api/client_list/")
+	if err != nil {
+		return "", fmt.Errorf("discover client id: %w", err)
+	}
+	ids, err := parseClientIDs(raw)
+	if err != nil {
+		return "", err
+	}
+	switch len(ids) {
+	case 0:
+		return "", fmt.Errorf("no arbitrage client found on this account; set FF_CLIENT_ID")
+	case 1:
+		s.ClientID = strconv.FormatInt(ids[0], 10)
+		return s.ClientID, nil
+	default:
+		return "", fmt.Errorf("account has %d clients; set FF_CLIENT_ID to choose one", len(ids))
+	}
+}
+
+// parseClientIDs extracts the client ids from a client_list/ response, accepting
+// either the DRF-paginated object ({results:[…]}) or a bare array.
+func parseClientIDs(raw []byte) ([]int64, error) {
+	type clientRef struct {
+		ID int64 `json:"id"`
+	}
+	var page struct {
+		Results []clientRef `json:"results"`
+	}
+	var items []clientRef
+	if json.Unmarshal(raw, &page) == nil && page.Results != nil {
+		items = page.Results
+	} else if err := json.Unmarshal(raw, &items); err != nil {
+		return nil, fmt.Errorf("decode client_list: %s", strings.TrimSpace(string(raw)))
+	}
+	ids := make([]int64, len(items))
+	for i, it := range items {
+		ids[i] = it.ID
+	}
+	return ids, nil
 }
 
 // authHeader normalises the token into a full Authorization header value.

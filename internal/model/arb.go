@@ -101,7 +101,7 @@ func (m marketPointJSON) toPoint() MarketPoint {
 
 // FetchClient returns the live client snapshot (current-cycle status + funds).
 func (s *LiveSource) FetchClient(ctx context.Context) (*ClientStatus, error) {
-	id, err := s.requireClientID()
+	id, err := s.resolveClientID(ctx)
 	if err != nil {
 		return nil, err
 	}

@@ -30,8 +30,9 @@ FF_PASSWORD=your-password
 
 The app logs in with your email + password (CSRF flow), mints a token, and loads
 your cycles. Alternatively set `FF_TOKEN` to a still-valid token to skip login
-(they expire ~hourly). `r` in the app re-mints and refreshes. Live mode also
-needs `FF_CLIENT_ID` — your client id, the number in the dashboard URL.
+(they expire ~hourly). `r` in the app re-mints and refreshes. Your client id is
+auto-detected from the account after login; set `FF_CLIENT_ID` only to override
+it (or if the account has more than one client).
 
 ### Live-source environment variables
 
@@ -39,7 +40,7 @@ needs `FF_CLIENT_ID` — your client id, the number in the dashboard URL.
 |---|---|---|
 | `FF_TOKEN` | — | token (bare or `Token <token>`); skips login if set |
 | `FF_USERNAME` / `FF_PASSWORD` | — | mint a token via CSRF login when no token is set |
-| `FF_CLIENT_ID` | — | **required** for live; your client id (the number in the dashboard URL) |
+| `FF_CLIENT_ID` | auto | client id; auto-detected from the account after login — set to override |
 | `FF_BASE_URL` | — | override the data API host |
 | `FF_AUTH_URL` | — | override the login host (CSRF + login) |
 | `FF_IDLE_RATE` | `6` | idle-cash rate (% p.a.); also `--idle-rate` |

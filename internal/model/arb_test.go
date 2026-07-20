@@ -66,3 +66,34 @@ func TestFetchMarketConditionsRejectsBadPeriod(t *testing.T) {
 		t.Fatal("expected error for disallowed period 3")
 	}
 }
+
+// TestParseClientIDs covers the DRF-paginated object, a bare array, and the
+// empty case that resolveClientID turns into a "set FF_CLIENT_ID" error.
+func TestParseClientIDs(t *testing.T) {
+	cases := []struct {
+		name string
+		raw  string
+		want []int64
+	}{
+		{"paginated single", `{"count":1,"results":[{"id":1234,"minimum_return":0.1}]}`, []int64{1234}},
+		{"paginated multiple", `{"results":[{"id":1},{"id":2}]}`, []int64{1, 2}},
+		{"paginated empty", `{"count":0,"results":[]}`, []int64{}},
+		{"bare array", `[{"id":7}]`, []int64{7}},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			got, err := parseClientIDs([]byte(c.raw))
+			if err != nil {
+				t.Fatalf("parseClientIDs: %v", err)
+			}
+			if len(got) != len(c.want) {
+				t.Fatalf("got %v, want %v", got, c.want)
+			}
+			for i := range got {
+				if got[i] != c.want[i] {
+					t.Errorf("id[%d] = %d, want %d", i, got[i], c.want[i])
+				}
+			}
+		})
+	}
+}
