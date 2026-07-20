@@ -3,6 +3,8 @@
 A terminal UI (Go + Bubble Tea) for browsing forex arbitrage **cycles** and
 comparing their annualised returns against a savings account.
 
+![fftui walking through the bundled demo dataset](demo.gif)
+
 ## Install
 
 Download the binary for your platform from the [latest release](https://github.com/wolffshots/fftui/releases/latest):
