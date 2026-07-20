@@ -3,7 +3,35 @@
 A terminal UI (Go + Bubble Tea) for browsing forex arbitrage **cycles** and
 comparing their annualised returns against a savings account.
 
+## Install
+
+Download the binary for your platform from the [latest release](https://github.com/wolffshots/fftui/releases/latest):
+
+| Platform | Asset |
+|---|---|
+| Linux x86-64 | `fftui_<version>_linux_amd64` |
+| Windows x86-64 | `fftui_<version>_windows_amd64.exe` |
+| macOS (Apple silicon) | `fftui_<version>_darwin_arm64` |
+
+On Linux/macOS, make it executable and check it runs:
+
+```sh
+chmod +x fftui_*            # the file you downloaded
+./fftui_* --version
+```
+
+macOS binaries are unsigned, so the first launch is blocked by Gatekeeper —
+right-click → **Open**, or clear the quarantine flag with
+`xattr -d com.apple.quarantine fftui_*_darwin_arm64`. To verify a download, run
+`sha256sum -c checksums.txt` (Linux) or `shasum -a 256 -c checksums.txt` (macOS).
+
+Prefer to build it yourself? `go install github.com/wolffshots/fftui@latest`
+puts the binary in `$(go env GOPATH)/bin`.
+
 ## Run
+
+The examples below run from a source checkout (`go run .`); with an installed
+binary, use your `fftui` executable in its place.
 
 ```sh
 # Offline / dev — read from the CSV export:
