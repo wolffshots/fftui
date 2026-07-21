@@ -28,7 +28,9 @@ type analyticsModel struct {
 	rates       analytics.Rates
 	allow       analytics.Allowances
 	fees        analytics.Fees
-	client      *model.ClientStatus // live snapshot for actual allowance balances; nil in CSV mode
+	client      *model.ClientStatus       // live snapshot for actual allowance balances; nil in CSV mode
+	marketYear  *model.MarketConditions   // year of spread history for the trend strip; nil in CSV mode
+	boot        analytics.BootstrapResult // cached on setCycles; too heavy to redo per render
 	vp          viewport.Model
 	width       int
 	height      int
@@ -38,7 +40,10 @@ func newAnalyticsModel(now time.Time, rates analytics.Rates, allow analytics.All
 	return analyticsModel{gran: analytics.Year, now: now, rates: rates, allow: allow, fees: fees, vp: viewport.New(0, 0)}
 }
 
-func (m *analyticsModel) setCycles(cs []model.Cycle) { m.cycles = cs }
+func (m *analyticsModel) setCycles(cs []model.Cycle) {
+	m.cycles = cs
+	m.boot = analytics.Bootstrap(cs, m.rates, 10_000)
+}
 
 func (m *analyticsModel) setSize(w, h int) {
 	m.width, m.height = w, h
@@ -149,6 +154,17 @@ func (m analyticsModel) renderContent() string {
 			dimStyle.Render("   vs time-weighted ") + colourReturn(life.Annualised))
 	}
 
+	// Bootstrap band on the lifetime figures: how much the headline rate
+	// depends on which cycles happened to land (cadence held fixed).
+	if m.boot.OK {
+		b.WriteString("\n" + titleStyle.Render("bootstrap 90% band") +
+			dimStyle.Render(" arb-only ") +
+			valueStyle.Render(percent(m.boot.Arb.Lo)+"–"+percent(m.boot.Arb.Hi)) +
+			dimStyle.Render("   net ") +
+			valueStyle.Render(percent(m.boot.Net.Lo)+"–"+percent(m.boot.Net.Hi)) +
+			dimStyle.Render(fmt.Sprintf("   (%d resamples of the cycle returns, cadence fixed)", m.boot.N)))
+	}
+
 	// Floor callout for the in-progress period: what the full period yields if no
 	// further trades happen (remainder earns idle) — the pessimistic bound the
 	// real period should beat.
@@ -162,6 +178,9 @@ func (m analyticsModel) renderContent() string {
 	}
 
 	b.WriteString("\n\n" + m.renderPlanning())
+	if trend := m.renderTrend(); trend != "" {
+		b.WriteString("\n" + trend)
+	}
 
 	if hasPartial {
 		b.WriteString("\n" + warnStyle.Render(warnMark+" partial period — annualised figure unreliable; excluded from variance stats"))
@@ -240,6 +259,52 @@ func (m analyticsModel) renderPlanning() string {
 				dimStyle.Render(" at "+money(p.TopTierMin)+"+ · net/cycle ")+
 				colourReturn(p.ReturnNow)+dimStyle.Render(" → ")+colourReturn(p.ReturnAtTop)+
 				dimStyle.Render(" at the top tier"))
+		}
+	}
+
+	return boxStyle.Render(strings.Join(lines, "\n"))
+}
+
+// renderTrend renders the decay-detection strip: the OLS slope on per-cycle
+// returns over the trailing year, recent-vs-prior 90-day rate and cadence, and
+// (live only) recent vs year-average market spread. Empty when there is too
+// little data to say anything.
+func (m analyticsModel) renderTrend() string {
+	t := analytics.TrendOf(m.cycles, m.now)
+	if t.N == 0 {
+		return ""
+	}
+	var lines []string
+
+	slope := fmt.Sprintf("%+.3fpp", t.Slope90*100)
+	verdict := "noise (not significant)"
+	if t.Significant {
+		if t.Slope90 < 0 {
+			verdict = "significant decay"
+		} else {
+			verdict = "significant improvement"
+		}
+	}
+	slopeStyled := valueStyle.Render(slope)
+	if t.Significant && t.Slope90 < 0 {
+		slopeStyled = warnStyle.Render(slope)
+	}
+	lines = append(lines, titleStyle.Render(pad("return trend", 22))+
+		slopeStyled+dimStyle.Render(fmt.Sprintf("/cycle per 90d over %d cycles — %s", t.N, verdict)))
+
+	lines = append(lines, titleStyle.Render(pad("90d vs prior 90d", 22))+
+		labelStyle.Render("annualised ")+colourReturn(t.Recent90)+
+		dimStyle.Render(" vs ")+colourReturn(t.Prior90)+
+		dimStyle.Render(fmt.Sprintf("  ·  cadence %d vs %d cycles", t.RecentCycles, t.PriorCycles)))
+
+	// Live only: is the raw market opportunity itself thinning?
+	if m.marketYear != nil {
+		if recent, overall, ok := analytics.SpreadTrend(m.marketYear.History, m.marketYear.Period, 30); ok {
+			lines = append(lines, titleStyle.Render(pad("market spread", 22))+
+				labelStyle.Render("30d avg ")+valueStyle.Render(fmt.Sprintf("%.2f%%", recent))+
+				dimStyle.Render(fmt.Sprintf(" vs %dd avg ", m.marketYear.Period))+
+				valueStyle.Render(fmt.Sprintf("%.2f%%", overall))+
+				dimStyle.Render("  (from the live market-conditions feed)"))
 		}
 	}
 

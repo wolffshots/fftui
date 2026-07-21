@@ -175,6 +175,30 @@ func TestAnalyticsPlanningStrip(t *testing.T) {
 	}
 }
 
+// TestAnalyticsStatsStrips asserts the bootstrap band and trend strip render,
+// including the live market-spread line when a year of history is present.
+func TestAnalyticsStatsStrips(t *testing.T) {
+	m := testModel(t)
+	out := m.analytics.renderContent()
+	for _, want := range []string{"bootstrap 90% band", "return trend", "90d vs prior 90d"} {
+		if !strings.Contains(out, want) {
+			t.Errorf("stats strips missing %q", want)
+		}
+	}
+	if strings.Contains(out, "market spread") {
+		t.Error("market spread line should need live history")
+	}
+
+	points := make([]model.MarketPoint, 60)
+	for i := range points {
+		points[i].Spread = 0.9
+	}
+	m.analytics.marketYear = &model.MarketConditions{History: points, Period: 365}
+	if !strings.Contains(m.analytics.renderContent(), "market spread") {
+		t.Error("market spread line missing with live history")
+	}
+}
+
 // TestLiveViewRendersData feeds a live snapshot (client status + market) and
 // checks the Live view and the status-bar strip show it.
 func TestLiveViewRendersData(t *testing.T) {

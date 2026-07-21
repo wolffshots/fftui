@@ -29,13 +29,18 @@ var tabNames = []string{"Cycles", "Analytics", "Detail", "Charts", "Live"}
 // sparkline; must be one of the API's allowed periods (1/7/30/90/365).
 const liveSpreadPeriod = 7
 
+// trendSpreadPeriod is the long history window (days) the analytics trend
+// strip compares recent spreads against; also an API-allowed period.
+const trendSpreadPeriod = 365
+
 // Messages emitted by the async fetch command. cyclesLoadedMsg carries the cycle
 // history plus the live-only extras (nil in CSV mode or if their pull failed).
 type cyclesLoadedMsg struct {
-	cycles []model.Cycle
-	client *model.ClientStatus
-	market *model.MarketConditions
-	now    time.Time // fetch-time "today"; zero when embedding pre-fetched data
+	cycles     []model.Cycle
+	client     *model.ClientStatus
+	market     *model.MarketConditions
+	marketYear *model.MarketConditions // year-long history for the trend strip
+	now        time.Time               // fetch-time "today"; zero when embedding pre-fetched data
 }
 type fetchErrMsg struct{ err error }
 
@@ -132,6 +137,9 @@ func fetchCmd(src model.CycleSource) tea.Cmd {
 			if mc, err := ff.FetchMarketConditions(ctx, liveSpreadPeriod); err == nil {
 				msg.market = mc
 			}
+			if mc, err := ff.FetchMarketConditions(ctx, trendSpreadPeriod); err == nil {
+				msg.marketYear = mc
+			}
 		}
 		return msg
 	}
@@ -167,7 +175,8 @@ func (m RootModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.client = msg.client
 		m.market = msg.market
 		m.table.setCycles(cs)
-		m.analytics.client = msg.client // live allowance balances for the planning strip
+		m.analytics.client = msg.client         // live allowance balances for the planning strip
+		m.analytics.marketYear = msg.marketYear // year of spread history for the trend strip
 		m.analytics.setCycles(cs)
 		m.charts.setCycles(cs)
 		m.live.setData(msg.client, msg.market)

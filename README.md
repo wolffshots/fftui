@@ -97,8 +97,10 @@ help; `r` refreshes; `q` quits.
 - **Table** — all cycles; `s`/`S` sort, `/` filter, `enter` opens detail.
 - **Analytics** — Year/Quarter/Month/Tax-year (`tab`) buckets with compound +
   annualised columns, a variance strip (`a` toggles active-only vs incl-dead
-  buckets), a lifetime money-weighted (IRR) line, a planning strip (tax-year
-  profit + estimated tax, SDA runway, capital sweet spot), and a ⚠ flag on
+  buckets), a lifetime money-weighted (IRR) line, a bootstrap 90% band on the
+  headline rates, a planning strip (tax-year profit + estimated tax, allowance
+  runway, capital sweet spot, fee ladder), a trend strip (return decay test,
+  90-day rate/cadence comparison, live market-spread drift), and a ⚠ flag on
   partial periods whose annualised figure is unreliable.
 - **Detail** — one cycle, including its hold-days ("best-case, no-idle")
   annualisation, explicitly separated from the savings-comparable headline rate.
@@ -166,6 +168,31 @@ annualised 9.78%  →  +idle@6% 15.13%  →  net@41% 8.91%
 
 All three coexist; nothing is replaced. Zero rates collapse every overlay back to
 the arb-only number.
+
+### Bootstrap band (how solid is the headline rate?)
+
+Under the IRR line, a **bootstrap 90% band** resamples the per-cycle returns
+with replacement (10,000 draws, fixed RNG seed so the figures don't jitter
+between refreshes) while holding the observed timeline — calendar span,
+trading days, cycle count — fixed, then reports the 5th–95th percentile of the
+recomputed lifetime arb-only and net (take-home) rates. Read it as "given this
+many cycles of this variability, the headline rate could plausibly have landed
+anywhere in this band". Cadence variability is deliberately not resampled, and
+the band needs at least 8 cycles to show.
+
+### Trend strip (is the arb decaying?)
+
+Below the planning strip, three decay signals over the trailing year:
+
+- **return trend** — an OLS slope on per-cycle returns over time, quoted in
+  percentage points per 90 days, with a t-test: `noise (not significant)`
+  until |t| ≥ 2, then `significant decay`/`significant improvement`.
+- **90d vs prior 90d** — arb-only annualised and cycle count for the trailing
+  90 days against the 90 days before, catching cadence slowdowns the slope
+  can't see.
+- **market spread** (live only) — the 30-day average arbitrage spread vs the
+  365-day average from the market-conditions feed: whether the raw opportunity
+  itself is thinning, independent of your execution.
 
 ### Full-period floor (pessimistic bound)
 

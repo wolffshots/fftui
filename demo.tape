@@ -8,9 +8,9 @@ Output demo.gif
 Set Shell "bash"
 Set FontSize 15
 Set Width 1360
-# Tall enough for the full analytics view: buckets + variance + IRR line +
-# the planning strip (tax year, allowance runway, sweet spot, fee ladder).
-Set Height 840
+# Tall enough for the full analytics view: buckets + variance + IRR +
+# bootstrap band + planning strip + trend strip.
+Set Height 960
 Set Padding 16
 Set Theme "Catppuccin Mocha"
 Set TypingSpeed 55ms
