@@ -42,6 +42,23 @@ func TestApplyDotEnv(t *testing.T) {
 	}
 }
 
+func TestParseFeeTiers(t *testing.T) {
+	// The exact format documented in .env.example.
+	tiers, err := parseFeeTiers("100000:35,150000:33,200000:30,300000:28,400000:25")
+	if err != nil {
+		t.Fatalf("parse: %v", err)
+	}
+	if len(tiers) != 5 || tiers[0].Min != 100_000 || tiers[0].Rate != 0.35 ||
+		tiers[4].Min != 400_000 || tiers[4].Rate != 0.25 {
+		t.Errorf("unexpected tiers: %+v", tiers)
+	}
+	for _, bad := range []string{"", "100000", "abc:35", "100000:x", "200000:30,100000:35"} {
+		if _, err := parseFeeTiers(bad); err == nil {
+			t.Errorf("expected error for %q", bad)
+		}
+	}
+}
+
 func TestUnquote(t *testing.T) {
 	for in, want := range map[string]string{
 		`"quoted"`:   "quoted",

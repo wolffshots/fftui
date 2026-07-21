@@ -21,7 +21,8 @@ func testModel(t *testing.T) RootModel {
 		t.Fatalf("fetch: %v", err)
 	}
 	now := time.Date(2026, 7, 10, 0, 0, 0, 0, time.UTC)
-	m := New(src, now, analytics.Rates{Idle: 0.06, Tax: 0.41})
+	m := New(src, now, analytics.Rates{Idle: 0.06, Tax: 0.41},
+		analytics.Allowances{SDALimit: 2_000_000, FIALimit: 10_000_000}, analytics.DefaultFees())
 	// Simulate the async load + a terminal size.
 	mm, _ := m.Update(cyclesLoadedMsg{cycles: cs})
 	m = mm.(RootModel)
@@ -141,6 +142,36 @@ func TestAnalyticsShowsMoneyWeighted(t *testing.T) {
 	}
 	if !strings.Contains(out, "9.78%") {
 		t.Fatal("money-weighted line missing expected 9.78% figure")
+	}
+}
+
+// TestAnalyticsPlanningStrip asserts the planning box renders the tax-year,
+// SDA and sweet-spot lines, and that the granularity cycle includes Tax year.
+func TestAnalyticsPlanningStrip(t *testing.T) {
+	m := testModel(t)
+	m = send(m, rune1('2'))
+	out := m.analytics.renderContent()
+	for _, want := range []string{"TY2027 taxable profit", "allowance 2026", "capital sweet spot", "usage inferred from cycle history", "fee ladder"} {
+		if !strings.Contains(out, want) {
+			t.Errorf("planning strip missing %q", want)
+		}
+	}
+	// With a live snapshot the strip shows the actual SDA/FIA balances instead.
+	m.analytics.client = &model.ClientStatus{SDAAvailable: 1_644_450, FIAAvailable: 7_145_861.97}
+	out = m.analytics.renderContent()
+	for _, want := range []string{"SDA left", "FIA left"} {
+		if !strings.Contains(out, want) {
+			t.Errorf("live planning strip missing %q", want)
+		}
+	}
+	for i := 0; i < 3; i++ {
+		m = send(m, tea.KeyMsg{Type: tea.KeyTab})
+	}
+	if m.analytics.gran != analytics.TaxYear {
+		t.Fatalf("three tabs from Year should land on Tax year, got %v", m.analytics.gran)
+	}
+	if !strings.Contains(m.analytics.renderContent(), "TY2025") {
+		t.Error("tax-year granularity should show TY2025 bucket")
 	}
 }
 

@@ -26,13 +26,16 @@ type analyticsModel struct {
 	includeDead bool
 	now         time.Time
 	rates       analytics.Rates
+	allow       analytics.Allowances
+	fees        analytics.Fees
+	client      *model.ClientStatus // live snapshot for actual allowance balances; nil in CSV mode
 	vp          viewport.Model
 	width       int
 	height      int
 }
 
-func newAnalyticsModel(now time.Time, rates analytics.Rates) analyticsModel {
-	return analyticsModel{gran: analytics.Year, now: now, rates: rates, vp: viewport.New(0, 0)}
+func newAnalyticsModel(now time.Time, rates analytics.Rates, allow analytics.Allowances, fees analytics.Fees) analyticsModel {
+	return analyticsModel{gran: analytics.Year, now: now, rates: rates, allow: allow, fees: fees, vp: viewport.New(0, 0)}
 }
 
 func (m *analyticsModel) setCycles(cs []model.Cycle) { m.cycles = cs }
@@ -47,7 +50,7 @@ func (m analyticsModel) update(msg tea.Msg, k keyMap) analyticsModel {
 	if key, ok := msg.(tea.KeyMsg); ok {
 		switch {
 		case keyMatches(key, k.SubTab):
-			m.gran = (m.gran + 1) % 3
+			m.gran = (m.gran + 1) % analytics.GranularityCount
 			m.vp.GotoTop()
 			return m
 		case keyMatches(key, k.ToggleDead):
@@ -158,10 +161,89 @@ func (m analyticsModel) renderContent() string {
 				percent(cur.AnnualisedWithIdle), percent(cur.AnnualisedWithIdleAfterTax))))
 	}
 
+	b.WriteString("\n\n" + m.renderPlanning())
+
 	if hasPartial {
 		b.WriteString("\n" + warnStyle.Render(warnMark+" partial period — annualised figure unreliable; excluded from variance stats"))
 	}
 	return b.String()
+}
+
+// renderPlanning renders the fiscal / capital-planning strip: current-tax-year
+// taxable profit, combined SDA+FIA runway for the calendar year, and the
+// marginal value of extra capital (see analytics.Plan).
+func (m analyticsModel) renderPlanning() string {
+	allow := m.allow
+	if m.client != nil {
+		allow.Live = true
+		allow.SDAAvailable = m.client.SDAAvailable
+		allow.FIAAvailable = m.client.FIAAvailable
+	}
+	p := analytics.Plan(m.cycles, m.now, m.rates, allow, m.fees)
+	var lines []string
+
+	lines = append(lines, titleStyle.Render(pad(p.TaxYearLabel+" taxable profit", 22))+
+		colourMoney(p.TaxYearProfit)+
+		dimStyle.Render(fmt.Sprintf("  est. tax @%s ", percent(m.rates.Tax)))+
+		valueStyle.Render(money(p.EstimatedTax))+
+		dimStyle.Render("  (profit lands in the tax year the cycle ends)"))
+
+	if p.TotalLimit > 0 {
+		use := titleStyle.Render(pad(fmt.Sprintf("allowance %d", m.now.Year()), 22)) +
+			labelStyle.Render("used ") + valueStyle.Render(money(p.Used)) +
+			dimStyle.Render(" of "+money(p.TotalLimit)+" ") +
+			valueStyle.Render(percent(p.Used/p.TotalLimit))
+		switch {
+		case p.Exhausted:
+			use += warnStyle.Render("  exhausted — no more cycles this calendar year")
+		case p.HasExhaust:
+			use += dimStyle.Render("  ≈ exhausts ") + valueStyle.Render(p.ExhaustDate.Format("2006-01-02")) +
+				dimStyle.Render(" at the current pace")
+		default:
+			use += dimStyle.Render("  lasts the year at the current pace")
+		}
+		lines = append(lines, use)
+
+		if allow.Live {
+			lines = append(lines, titleStyle.Render(pad("", 22))+
+				labelStyle.Render("SDA left ")+valueStyle.Render(money(allow.SDAAvailable))+
+				dimStyle.Render(" · ")+
+				labelStyle.Render("FIA left ")+valueStyle.Render(money(allow.FIAAvailable))+
+				dimStyle.Render("  (live · FIA via FF's AIT filings)"))
+		} else {
+			lines = append(lines, titleStyle.Render(pad("", 22))+
+				dimStyle.Render("usage inferred from cycle history — live SDA/FIA split needs the live source"))
+		}
+
+		if p.SweetSpot > 0 {
+			lines = append(lines, titleStyle.Render(pad("capital sweet spot", 22))+
+				valueStyle.Render(money(p.SweetSpot))+
+				dimStyle.Render(fmt.Sprintf("/cycle at %d cycles/yr — the combined allowance binds above this", p.CyclesPerYear)))
+			verdict := titleStyle.Render(pad("current capital", 22)) + valueStyle.Render(money(p.CurrentCapital))
+			if p.CurrentCapital > p.SweetSpot {
+				verdict += warnStyle.Render("  above the spot") +
+					dimStyle.Render(fmt.Sprintf(" — +R100k ≈ +%s/yr gross, %s net (fee-tier effect only)",
+						money(p.Extra100kGross), money(p.Extra100kNet)))
+			} else {
+				verdict += dimStyle.Render(fmt.Sprintf("  below the spot — +R100k ≈ +%s/yr gross, %s net",
+					money(p.Extra100kGross), money(p.Extra100kNet)))
+			}
+			lines = append(lines, verdict)
+		}
+
+		// Fee ladder: bigger cycles dilute the fixed fees and pay a lower FF
+		// tier, so the modelled net return per cycle rises with capital.
+		if p.TopTierMin > 0 && p.CurrentCapital > 0 {
+			lines = append(lines, titleStyle.Render(pad("fee ladder", 22))+
+				labelStyle.Render("FF fee ")+valueStyle.Render(percent(p.CurrentTier))+
+				dimStyle.Render(" of gross now → ")+valueStyle.Render(percent(p.TopTier))+
+				dimStyle.Render(" at "+money(p.TopTierMin)+"+ · net/cycle ")+
+				colourReturn(p.ReturnNow)+dimStyle.Render(" → ")+colourReturn(p.ReturnAtTop)+
+				dimStyle.Render(" at the top tier"))
+		}
+	}
+
+	return boxStyle.Render(strings.Join(lines, "\n"))
 }
 
 // inProgressBucket returns the bucket that contains `now` (the current period),
@@ -187,7 +269,7 @@ func varianceLine(title string, v analytics.VarianceStats) string {
 }
 
 func (m analyticsModel) granTabs() string {
-	names := []analytics.Granularity{analytics.Year, analytics.Quarter, analytics.Month}
+	names := []analytics.Granularity{analytics.Year, analytics.Quarter, analytics.Month, analytics.TaxYear}
 	var parts []string
 	for _, g := range names {
 		if g == m.gran {

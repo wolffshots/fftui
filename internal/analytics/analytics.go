@@ -38,7 +38,13 @@ const (
 	Year Granularity = iota
 	Quarter
 	Month
+	// TaxYear buckets on the South African tax year (1 March – end February),
+	// labelled by the year it ends, SARS-style: TY2027 = 1 Mar 2026 – 28 Feb 2027.
+	TaxYear
 )
+
+// GranularityCount is the number of granularities the UI can cycle through.
+const GranularityCount = 4
 
 func (g Granularity) String() string {
 	switch g {
@@ -46,6 +52,8 @@ func (g Granularity) String() string {
 		return "Year"
 	case Quarter:
 		return "Quarter"
+	case TaxYear:
+		return "Tax year"
 	default:
 		return "Month"
 	}
@@ -407,6 +415,11 @@ func periodStart(g Granularity, t time.Time) time.Time {
 	case Quarter:
 		qm := (int(m)-1)/3*3 + 1
 		return time.Date(y, time.Month(qm), 1, 0, 0, 0, 0, time.UTC)
+	case TaxYear:
+		if m < time.March {
+			y--
+		}
+		return time.Date(y, time.March, 1, 0, 0, 0, 0, time.UTC)
 	default: // Month
 		return time.Date(y, m, 1, 0, 0, 0, 0, time.UTC)
 	}
@@ -414,7 +427,7 @@ func periodStart(g Granularity, t time.Time) time.Time {
 
 func nextPeriod(g Granularity, p time.Time) time.Time {
 	switch g {
-	case Year:
+	case Year, TaxYear:
 		return p.AddDate(1, 0, 0)
 	case Quarter:
 		return p.AddDate(0, 3, 0)
@@ -437,6 +450,8 @@ func periodLabel(g Granularity, p time.Time) string {
 	case Quarter:
 		q := (int(m)-1)/3 + 1
 		return p.Format("2006") + "-Q" + string(rune('0'+q))
+	case TaxYear: // named for the year it ends (starts 1 March of p's year)
+		return "TY" + p.AddDate(1, 0, 0).Format("2006")
 	default:
 		return p.Format("2006-01")
 	}

@@ -8,7 +8,9 @@ Output demo.gif
 Set Shell "bash"
 Set FontSize 15
 Set Width 1360
-Set Height 720
+# Tall enough for the full analytics view: buckets + variance + IRR line +
+# the planning strip (tax year, allowance runway, sweet spot, fee ladder).
+Set Height 840
 Set Padding 16
 Set Theme "Catppuccin Mocha"
 Set TypingSpeed 55ms
@@ -38,13 +40,23 @@ Sleep 2.5s
 Type "q"
 Sleep 900ms
 
-# Analytics — cycle granularity (Tab) and toggle dead buckets (a)
+# Analytics — Year buckets, the money-weighted (IRR) line, and the planning
+# strip: tax-year profit + est. tax, SDA+FIA allowance runway, capital sweet
+# spot, and the fee ladder. Scroll down in case the strip is clipped.
 Type "2"
-Sleep 2s
+Sleep 2.5s
+Down 8
+Sleep 3.5s
+
+# Cycle granularity: Quarter → Month → SA Tax year (TY buckets)
 Tab
-Sleep 1.3s
+Sleep 1.2s
 Tab
-Sleep 1.3s
+Sleep 1.2s
+Tab
+Sleep 2.5s
+
+# Toggle dead (no-trade) buckets into the stats
 Type "a"
 Sleep 2s
 

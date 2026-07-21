@@ -80,6 +80,11 @@ cache dir, ~1h TTL) so later runs skip login — and the OTP — until it expire
 | `FF_AUTH_URL` | — | override the login host (CSRF + login) |
 | `FF_IDLE_RATE` | `6` | idle-cash rate (% p.a.); also `--idle-rate` |
 | `FF_TAX_RATE` | `41` | marginal tax rate (%) on returns; also `--tax-rate` |
+| `FF_SDA_LIMIT` | `2000000` | annual Single Discretionary Allowance in rand; also `--sda-limit` |
+| `FF_FIA_LIMIT` | `10000000` | annual Foreign Investment Allowance in rand; also `--fia-limit`. SDA+FIA form the planning pool; both `0` hides it |
+| `FF_FEE_FIXED` | `530` | fixed third-party fees per cycle in rand; also `--fee-fixed` |
+| `FF_FEE_VARIABLE` | `0.23` | variable third-party fees as % of cycle capital; also `--fee-variable` |
+| `FF_FEE_TIERS` | built-in | FF success-fee tiers as `capital:percent,...`; also `--fee-tiers` |
 
 > Login is a two-step CSRF flow on a separate host that returns an
 > `arb_auth_token` (valid ~1 hour); `r` in the app re-mints and refreshes.
@@ -90,10 +95,11 @@ cache dir, ~1h TTL) so later runs skip login — and the OTP — until it expire
 help; `r` refreshes; `q` quits.
 
 - **Table** — all cycles; `s`/`S` sort, `/` filter, `enter` opens detail.
-- **Analytics** — Year/Quarter/Month (`tab`) buckets with compound + annualised
-  columns, a variance strip (`a` toggles active-only vs incl-dead buckets), a
-  lifetime money-weighted (IRR) line, and a ⚠ flag on partial periods whose
-  annualised figure is unreliable.
+- **Analytics** — Year/Quarter/Month/Tax-year (`tab`) buckets with compound +
+  annualised columns, a variance strip (`a` toggles active-only vs incl-dead
+  buckets), a lifetime money-weighted (IRR) line, a planning strip (tax-year
+  profit + estimated tax, SDA runway, capital sweet spot), and a ⚠ flag on
+  partial periods whose annualised figure is unreliable.
 - **Detail** — one cycle, including its hold-days ("best-case, no-idle")
   annualisation, explicitly separated from the savings-comparable headline rate.
 - **Charts** — braille/block sparklines for per-cycle return, monthly annualised
@@ -180,6 +186,63 @@ a completed period there is no remainder, so its floor equals its realised
 with-idle / net figures. The callout follows the active sub-tab (current
 year/quarter/month) and is especially useful for short partial buckets where the
 extrapolated figure is flagged ⚠ unreliable.
+
+### Planning strip (tax year, SDA runway, capital sweet spot)
+
+Below the variance stats the analytics view shows three planning figures:
+
+- **Tax year** — the `Tax year` granularity buckets on the South African tax
+  year (1 March – end February, labelled by the year it ends: TY2027 = 1 Mar
+  2026 – 28 Feb 2027). The planning strip separately shows taxable profit for
+  the *current* tax year using **realisation accounting** — a cycle's whole
+  profit lands in the tax year its end date falls in, which is what a
+  provisional return needs (the rate buckets instead prorate boundary-spanning
+  cycles, so the two can differ slightly) — times `--tax-rate` for the
+  estimated tax owed.
+- **Allowance runway** — every cycle sends its `ZAR in` offshore afresh, so
+  each consumes that much annual exchange-control allowance again. Future
+  Forex trades against the **combined pool** — the clearance-free SDA
+  (`--sda-limit`, default R2m — doubled from R1m in the 2026 Budget, effective
+  8 April 2026 per SARB Exchange Control Circular 6-2026) plus the FIA
+  (`--fia-limit`, default R10m, on the AIT clearances FF files for you) —
+  R12m/year combined. With the live source, usage comes from the API's actual
+  `SDA available` / `FIA available` balances (which also see in-flight cycles
+  and non-arb transfers) and the strip shows the split; in `--csv` mode it is
+  inferred by summing the year's cycle `ZAR in`s. Either way the strip shows
+  usage, remaining, and the projected exhaustion date at the year-to-date pace.
+- **Capital sweet spot** — `(sda+fia) / cycles-per-year` (trailing 365 days):
+  the per-cycle capital above which the combined allowance runs out before the
+  year does. Below it, an extra rand compounds through every cycle (≈ avg
+  return × cycles/yr per year, gross); above it, extra capital only ever earns
+  the idle rate, because the allowance — not capital — is the binding
+  constraint on annual profit (`max gross ≈ avg return × (sda+fia)`).
+
+### Fee model (fee ladder and capital projections)
+
+The capital figures in the planning strip are **fee-aware**. Each cycle's fee
+waterfall (verified to the cent against real cycle statements) is:
+
+```
+gross earnings  = capital × market spread        # from live trade rates
+− third-party   = fixed rand (bank admin R500 + instant EFT R30 = R530)
+                + variable × capital (bank exchange + offshore fees ≈ 0.23%)
+= gross profit
+− FF success fee = gross profit × tier(capital)  # 35% ≥R100k · 33% ≥R150k ·
+                                                 # 30% ≥R200k · 28% ≥R300k · 25% ≥R400k
+= net profit
+```
+
+Because the fixed fees dilute and the FF tier falls as cycle capital grows,
+the net return per cycle **improves with size**. The planning strip backs the
+average market spread out of the trailing cycles through this waterfall, then
+projects net returns at other capital sizes: the `fee ladder` line shows your
+current tier vs the top tier and the modelled net-return-per-cycle at each,
+and the `+R100k` figure prices extra capital including tier crossings (above
+the sweet spot only the fee-position improvement remains, since deployment is
+allowance-capped). All parameters are configurable (`--fee-fixed`,
+`--fee-variable`, `--fee-tiers "100000:35,...,400000:25"`) because FF can
+revise the schedule; only the 35% and 30% tiers are corroborated by statements
+on file, the rest follow FF's published table.
 
 ### Money-weighted (IRR)
 

@@ -83,8 +83,10 @@ type RootModel struct {
 }
 
 // New builds the root model. rates carries the idle-cash rate and tax rate used
-// for the with-idle and after-tax annualised figures.
-func New(source model.CycleSource, now time.Time, rates analytics.Rates) RootModel {
+// for the with-idle and after-tax annualised figures; allow carries the annual
+// SDA/FIA limits for the planning figures (a zero total disables them); fees is
+// the per-cycle fee schedule for the fee-aware capital projections.
+func New(source model.CycleSource, now time.Time, rates analytics.Rates, allow analytics.Allowances, fees analytics.Fees) RootModel {
 	sp := spinner.New()
 	sp.Spinner = spinner.Dot
 	sp.Style = lipgloss.NewStyle().Foreground(accent)
@@ -99,7 +101,7 @@ func New(source model.CycleSource, now time.Time, rates analytics.Rates) RootMod
 		loading:   true,
 		active:    viewTable,
 		table:     newTableModel(rates),
-		analytics: newAnalyticsModel(now, rates),
+		analytics: newAnalyticsModel(now, rates, allow, fees),
 		detail:    newDetailModel(),
 		charts:    newChartsModel(now, rates),
 		live:      newLiveModel(),
@@ -165,6 +167,7 @@ func (m RootModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.client = msg.client
 		m.market = msg.market
 		m.table.setCycles(cs)
+		m.analytics.client = msg.client // live allowance balances for the planning strip
 		m.analytics.setCycles(cs)
 		m.charts.setCycles(cs)
 		m.live.setData(msg.client, msg.market)
