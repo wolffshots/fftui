@@ -130,6 +130,20 @@ func TestAnalyticsToggles(t *testing.T) {
 	}
 }
 
+// TestAnalyticsShowsMoneyWeighted asserts the lifetime IRR line renders. The
+// reference data reinvests every payout in full, so the money-weighted figure
+// must read the same as the arb-only annualised (9.78%).
+func TestAnalyticsShowsMoneyWeighted(t *testing.T) {
+	m := testModel(t)
+	out := m.analytics.renderContent()
+	if !strings.Contains(out, "money-weighted (IRR)") {
+		t.Fatal("analytics view missing money-weighted line")
+	}
+	if !strings.Contains(out, "9.78%") {
+		t.Fatal("money-weighted line missing expected 9.78% figure")
+	}
+}
+
 // TestLiveViewRendersData feeds a live snapshot (client status + market) and
 // checks the Live view and the status-bar strip show it.
 func TestLiveViewRendersData(t *testing.T) {

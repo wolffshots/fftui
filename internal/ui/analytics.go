@@ -135,6 +135,17 @@ func (m analyticsModel) renderContent() string {
 	b.WriteString(dimStyle.Render(fmt.Sprintf("scope: %s (a to toggle) · stats over %d full buckets · idle %s/yr on non-trading days · tax %s on returns",
 		scope, v.N, percent(m.rates.Idle), percent(m.rates.Tax))))
 
+	// Lifetime money-weighted (XIRR) rate: like the arb-only annualised but each
+	// cycle counts in proportion to its capital, so it tracks what the actual
+	// rands earned across deposits. Diverges from time-weighted when capital size
+	// varies between cycles.
+	if mwr, ok := analytics.MoneyWeighted(m.cycles); ok {
+		life := analytics.Lifetime(m.cycles, m.rates)
+		b.WriteString("\n" + titleStyle.Render("money-weighted (IRR)") +
+			dimStyle.Render(" lifetime, capital-weighted, arb-only: ") + colourReturn(mwr) +
+			dimStyle.Render("   vs time-weighted ") + colourReturn(life.Annualised))
+	}
+
 	// Floor callout for the in-progress period: what the full period yields if no
 	// further trades happen (remainder earns idle) — the pessimistic bound the
 	// real period should beat.

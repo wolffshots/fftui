@@ -91,8 +91,9 @@ help; `r` refreshes; `q` quits.
 
 - **Table** — all cycles; `s`/`S` sort, `/` filter, `enter` opens detail.
 - **Analytics** — Year/Quarter/Month (`tab`) buckets with compound + annualised
-  columns, a variance strip (`a` toggles active-only vs incl-dead buckets), and
-  a ⚠ flag on partial periods whose annualised figure is unreliable.
+  columns, a variance strip (`a` toggles active-only vs incl-dead buckets), a
+  lifetime money-weighted (IRR) line, and a ⚠ flag on partial periods whose
+  annualised figure is unreliable.
 - **Detail** — one cycle, including its hold-days ("best-case, no-idle")
   annualisation, explicitly separated from the savings-comparable headline rate.
 - **Charts** — braille/block sparklines for per-cycle return, monthly annualised
@@ -179,6 +180,20 @@ a completed period there is no remainder, so its floor equals its realised
 with-idle / net figures. The callout follows the active sub-tab (current
 year/quarter/month) and is especially useful for short partial buckets where the
 extrapolated figure is flagged ⚠ unreliable.
+
+### Money-weighted (IRR)
+
+The analytics view also shows a lifetime **money-weighted** rate (XIRR). The
+headline figures above are *time-weighted* — every cycle counts equally
+regardless of size — while the IRR weights each stretch by the capital actually
+in it, so it tracks what your specific rands earned across deposits and
+withdrawals. External flows are inferred from the cycle series: each payout is
+assumed to sit at 0% until redeployed, and any gap between a cycle's `ZAR in`
+and the cash on hand is a deposit (or withdrawal). With clean full reinvestment
+(each `ZAR in` = previous `ZAR out`, as in the demo dataset) the intermediate
+flows vanish and the IRR equals the arb-only annualised (9.78%); the two
+diverge only when capital jumps between cycles. Quoted in the same
+nominal-monthly convention, arb-only (no idle credit).
 
 ## Test
 
