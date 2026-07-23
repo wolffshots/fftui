@@ -7,6 +7,19 @@ comparing their annualised returns against a savings account.
 
 ## Install
 
+### Homebrew (macOS / Linux)
+
+```sh
+brew install wolffshots/tap/fftui
+```
+
+Builds from source (Go is installed as a build-only dependency) via
+[wolffshots/homebrew-tap](https://github.com/wolffshots/homebrew-tap), so it
+works on Intel and Apple silicon Macs and on Linux, with no Gatekeeper
+quarantine step.
+
+### Prebuilt binaries
+
 Download the binary for your platform from the [latest release](https://github.com/wolffshots/fftui/releases/latest):
 
 | Platform | Asset |
