@@ -84,18 +84,18 @@ func main() {
 		return
 	}
 
-	// Resolve FF_PASSWORD from FF_PASSWORD_CMD if needed (e.g. a 1Password
-	// `op read` one-liner) before anything tries to log in.
-	if err := resolvePasswordCmd(); err != nil {
-		fmt.Fprintln(os.Stderr, err)
-		os.Exit(1)
-	}
-
 	// Selection logic (§3): --csv → CSVSource, otherwise the live API source.
 	var source model.CycleSource
 	if *csvPath != "" {
 		source = model.NewCSVSource(*csvPath)
 	} else {
+		// Resolve FF_PASSWORD from FF_PASSWORD_CMD if needed (e.g. a 1Password
+		// `op read` one-liner) before anything tries to log in. Only the live
+		// source needs credentials — CSV mode must run without them.
+		if err := resolvePasswordCmd(); err != nil {
+			fmt.Fprintln(os.Stderr, err)
+			os.Exit(1)
+		}
 		live := model.NewLiveSource()
 		// Authenticate up front so an OTP prompt (if the account requires one)
 		// happens here on the terminal rather than inside the alt-screen UI.
