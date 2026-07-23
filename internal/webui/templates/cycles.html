@@ -1,0 +1,44 @@
+{{define "content"}}
+<section class="cycles">
+<form class="filter" method="get" action="/cycles">
+  <input type="hidden" name="sort" value="{{.Sort}}">
+  <input type="hidden" name="dir" value="{{.Dir}}">
+  <input type="search" name="q" value="{{.Q}}" placeholder="filter by code or type…" aria-label="filter cycles">
+  <button type="submit">filter</button>
+  {{if .Filtered}}<a class="clear" href="/cycles?sort={{.Sort}}&amp;dir={{.Dir}}">clear</a>{{end}}
+</form>
+<div class="tablewrap">
+<table class="cycles-table">
+<thead><tr>
+{{range .Cols}}{{if .URL}}<th{{if .Active}} class="active"{{end}}><a href="{{.URL}}">{{.Title}}{{if .Active}} {{.Arrow}}{{end}}</a></th>{{else}}<th>{{.Title}}</th>{{end}}
+{{end}}</tr></thead>
+<tbody>
+{{range .Rows}}
+<tr>
+  <td class="code"><a href="/cycles/{{.Code}}">{{.Code}}</a></td>
+  <td>{{.Type}}</td>
+  <td>{{.Start}}</td>
+  <td>{{.End}}</td>
+  <td class="num">{{money .ZarIn}}</td>
+  <td class="num">{{money .ZarOut}}</td>
+  <td class="num {{signClass .Profit}}">{{money .Profit}}</td>
+  <td class="num {{signClass .Return}}">{{percent .Return}}</td>
+  <td class="num">{{.Days}}</td>
+</tr>
+{{end}}
+</tbody>
+</table>
+</div>
+<p class="table-footer">
+  <span class="stat"><span class="dim">cycles</span> <span class="val">{{.Count}}</span></span>
+  <span class="stat"><span class="dim">profit</span> <span class="val {{signClass .TotalProfit}}">{{money .TotalProfit}}</span></span>
+  {{if .Summary}}
+  <span class="stat"><span class="dim">annualised</span> <span class="val {{signClass .Summary.Annualised}}">{{percent .Summary.Annualised}}</span></span>
+  <span class="stat"><span class="dim">+idle@{{.Summary.IdleLabel}}</span> <span class="val {{signClass .Summary.WithIdle}}">{{percent .Summary.WithIdle}}</span></span>
+  <span class="stat"><span class="dim">net@{{.Summary.TaxLabel}}</span> <span class="val {{signClass .Summary.Net}}">{{percent .Summary.Net}}</span></span>
+  {{else}}
+  <span class="stat dim">annualised n/a (filtered)</span>
+  {{end}}
+</p>
+</section>
+{{end}}

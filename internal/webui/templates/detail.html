@@ -1,0 +1,18 @@
+{{define "content"}}
+<section class="detail">
+<h1>{{.Cycle.Code}} <span class="dim">{{.Cycle.Type}}</span></h1>
+<dl class="kv">
+  <dt>Date range</dt><dd>{{.Cycle.Start}} → {{.Cycle.End}}</dd>
+  <dt>Hold days</dt><dd>{{.Cycle.Days}}</dd>
+  <dt>ZAR in</dt><dd>{{money .Cycle.ZarIn}}</dd>
+  <dt>ZAR out</dt><dd>{{money .Cycle.ZarOut}}</dd>
+  <dt>Net profit</dt><dd class="{{signClass .Cycle.Profit}}">{{money .Cycle.Profit}}</dd>
+  <dt>Return</dt><dd class="{{signClass .Cycle.Return}}">{{percent .Cycle.Return}}</dd>
+  <dt>Annualised (hold-days)</dt><dd class="{{signClass .Cycle.AnnualisedHold}}">{{percent .Cycle.AnnualisedHold}}</dd>
+</dl>
+<p class="dim note">best-case, no-idle basis: this single cycle's return compounded over its
+hold days only. NOT comparable to a savings rate — the analytics view's
+annualised figures (which include idle time) are the honest comparison.</p>
+<p><a href="/cycles">← back to cycles</a></p>
+</section>
+{{end}}

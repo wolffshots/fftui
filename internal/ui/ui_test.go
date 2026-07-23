@@ -10,6 +10,7 @@ import (
 	"github.com/charmbracelet/lipgloss"
 
 	"github.com/wolffshots/fftui/internal/analytics"
+	"github.com/wolffshots/fftui/internal/data"
 	"github.com/wolffshots/fftui/internal/model"
 )
 
@@ -21,7 +22,7 @@ func testModel(t *testing.T) RootModel {
 		t.Fatalf("fetch: %v", err)
 	}
 	now := time.Date(2026, 7, 10, 0, 0, 0, 0, time.UTC)
-	m := New(src, now, analytics.Rates{Idle: 0.06, Tax: 0.41},
+	m := New(data.NewService(src), now, analytics.Rates{Idle: 0.06, Tax: 0.41},
 		analytics.Allowances{SDALimit: 2_000_000, FIALimit: 10_000_000}, analytics.DefaultFees())
 	// Simulate the async load + a terminal size.
 	mm, _ := m.Update(cyclesLoadedMsg{cycles: cs})

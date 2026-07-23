@@ -3,17 +3,25 @@ package main
 import (
 	"bufio"
 	"context"
+	"errors"
 	"flag"
 	"fmt"
+	"net"
+	"net/http"
 	"os"
+	"os/signal"
 	"strconv"
 	"strings"
+	"syscall"
+	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
 
 	"github.com/wolffshots/fftui/internal/analytics"
+	"github.com/wolffshots/fftui/internal/data"
 	"github.com/wolffshots/fftui/internal/model"
 	"github.com/wolffshots/fftui/internal/ui"
+	"github.com/wolffshots/fftui/internal/webui"
 )
 
 // version is overridden at release build time via -ldflags "-X main.version=…".
@@ -33,10 +41,18 @@ func main() {
 	feeFixed := flag.Float64("fee-fixed", envFloat("FF_FEE_FIXED", defFees.Fixed), "fixed third-party fees per cycle in rand (bank admin + EFT)")
 	feeVarPct := flag.Float64("fee-variable", envFloat("FF_FEE_VARIABLE", defFees.Variable*100), "variable third-party fees per cycle as % of capital (exchange + offshore fees)")
 	feeTiers := flag.String("fee-tiers", envStr("FF_FEE_TIERS", ""), `FF success-fee tiers as "capital:percent,..." (e.g. "100000:35,200000:30,400000:25"); empty uses the built-in schedule`)
+	web := flag.Bool("web", false, "serve the web UI on --addr alongside the TUI")
+	headless := flag.Bool("headless", false, "with --web: serve the web UI only (no TUI); runs until SIGINT/SIGTERM")
+	addr := flag.String("addr", envStr("FF_WEB_ADDR", "127.0.0.1:8442"), "listen address for the web UI (--web)")
 	showVersion := flag.Bool("version", false, "print version and exit")
 	logout := flag.Bool("logout", false, "clear the cached login token and exit")
 	initConfigFlag := flag.Bool("init-config", false, "write a commented config template to the user config path and exit")
 	flag.Parse()
+
+	if *headless && !*web {
+		fmt.Fprintln(os.Stderr, "--headless requires --web")
+		os.Exit(1)
+	}
 
 	if *showVersion {
 		fmt.Println("fftui", version)
@@ -106,11 +122,99 @@ func main() {
 		}
 		fees.Tiers = tiers
 	}
-	p := tea.NewProgram(ui.New(source, now, rates, allow, fees), tea.WithAltScreen())
-	if _, err := p.Run(); err != nil {
-		fmt.Fprintln(os.Stderr, "error:", err)
+	svc := data.NewService(source)
+
+	// Web front end: same service, same figures. Listen before the TUI takes
+	// the terminal so a bad address (port in use) fails loudly up front.
+	var websrv *http.Server
+	var webErr chan error
+	if *web {
+		handler, err := webui.New(svc, webui.Options{
+			Token:   os.Getenv("FF_WEB_TOKEN"),
+			Version: version,
+			CSVMode: *csvPath != "",
+			Rates:   rates,
+			Allow:   allow,
+			Fees:    fees,
+		})
+		if err != nil {
+			fmt.Fprintln(os.Stderr, "web ui:", err)
+			os.Exit(1)
+		}
+		warnIfExposed(*addr, os.Getenv("FF_WEB_TOKEN"))
+
+		if *headless {
+			// Best-effort initial fetch so the first page has data; a failure
+			// is stored on the service and shown as the page's error banner.
+			if _, err := svc.Refresh(context.Background()); err != nil {
+				fmt.Fprintln(os.Stderr, "initial refresh failed (serving anyway):", err)
+			}
+		}
+
+		ln, err := net.Listen("tcp", *addr)
+		if err != nil {
+			fmt.Fprintln(os.Stderr, "web listen:", err)
+			os.Exit(1)
+		}
+		websrv = &http.Server{Handler: handler}
+		webErr = make(chan error, 1)
+		go func() { webErr <- websrv.Serve(ln) }()
+		fmt.Printf("web ui on http://%s\n", ln.Addr())
+
+		if *headless {
+			ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+			defer stop()
+			select {
+			case <-ctx.Done():
+			case err := <-webErr:
+				fmt.Fprintln(os.Stderr, "web server error:", err)
+				os.Exit(1)
+			}
+			shutdownWeb(websrv, webErr)
+			return
+		}
+	}
+
+	p := tea.NewProgram(ui.New(svc, now, rates, allow, fees), tea.WithAltScreen())
+	_, runErr := p.Run()
+	if websrv != nil {
+		shutdownWeb(websrv, webErr)
+	}
+	if runErr != nil {
+		fmt.Fprintln(os.Stderr, "error:", runErr)
 		os.Exit(1)
 	}
+}
+
+// shutdownWeb stops the web server with a short grace period and surfaces any
+// serve error that happened while the other front end was running.
+func shutdownWeb(srv *http.Server, errCh chan error) {
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	defer cancel()
+	srv.Shutdown(ctx)
+	if err := <-errCh; err != nil && !errors.Is(err, http.ErrServerClosed) {
+		fmt.Fprintln(os.Stderr, "web server error:", err)
+	}
+}
+
+// warnIfExposed prints a loud warning when the web UI will listen beyond
+// loopback with auth disabled — that serves the full trading history
+// unauthenticated to whatever network the address is on.
+func warnIfExposed(addr, token string) {
+	if token != "" {
+		return
+	}
+	host, _, err := net.SplitHostPort(addr)
+	if err != nil {
+		host = addr
+	}
+	if host == "localhost" {
+		return
+	}
+	if ip := net.ParseIP(host); ip != nil && ip.IsLoopback() {
+		return
+	}
+	fmt.Fprintf(os.Stderr, "WARNING: --addr %s is not loopback and FF_WEB_TOKEN is unset — the web UI will serve your full trading history UNAUTHENTICATED on the network\n", addr)
 }
 
 // promptOTP asks the user for the OTP the API just sent (via WhatsApp/SMS) and

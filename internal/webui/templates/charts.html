@@ -1,0 +1,18 @@
+{{define "content"}}
+<section class="charts">
+{{if not .Charts}}
+<p class="dim">no data</p>
+{{end}}
+{{range .Charts}}
+<div class="chart">
+<h2>{{.Title}}</h2>
+{{if .Series}}
+<pre class="spark {{if .Neg}}neg{{else}}pos{{end}}">{{spark .Series .Width}}</pre>
+<p class="dim">min <span class="val">{{.Min}}</span> max <span class="val">{{.Max}}</span> latest <span class="val">{{.Latest}}</span> n=<span class="val">{{.N}}</span></p>
+{{else}}
+<p class="dim">(no points)</p>
+{{end}}
+</div>
+{{end}}
+</section>
+{{end}}

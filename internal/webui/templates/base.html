@@ -1,0 +1,50 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>{{.Title}} · fftui</title>
+<link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+{{if .Status}}
+<div class="statusbar">
+  {{- if .Status.HasClient}}
+  <span class="dot {{.Status.DotClass}}">●</span>
+  <span class="val">{{.Status.Label}}</span>
+  {{- if .Status.Invested}} <span class="dim">· invested</span> <span class="val">{{money .Status.Invested}}</span>{{end}}
+  {{- end}}
+  {{- if .Status.HasSpread}} <span class="dim">spread</span> <span class="pos">{{spreadFmt .Status.Spread}}</span>{{end}}
+  {{- if .Status.Updated}} <span class="dim">{{.Status.Updated}}</span>{{end}}
+</div>
+{{end}}
+<nav class="tabs">
+  <a href="/cycles"{{if eq .Active "cycles"}} class="active"{{end}}>Cycles</a>
+  <a href="/analytics"{{if eq .Active "analytics"}} class="active"{{end}}>Analytics</a>
+  {{if eq .Active "detail"}}<span class="tab-detail active">Detail</span>{{end}}
+  <a href="/charts"{{if eq .Active "charts"}} class="active"{{end}}>Charts</a>
+  <a href="/live"{{if eq .Active "live"}} class="active"{{end}}>Live</a>
+  <form class="refresh" method="post" action="/refresh"><button type="submit">refresh</button></form>
+</nav>
+{{if .Err}}
+<div class="error">
+  fetch failed: {{.Err}}
+  <form method="post" action="/refresh"><button type="submit">retry</button></form>
+</div>
+{{end}}
+<main>
+{{if .NoData}}
+<section class="nodata">
+  <p class="dim">no data yet</p>
+  <form method="post" action="/refresh"><button type="submit">refresh</button></form>
+</section>
+{{else}}
+{{template "content" .}}
+{{end}}
+</main>
+<footer class="pagefoot">
+  {{if .FetchedAt}}<span class="dim">data as of {{.FetchedAt}}</span> · {{end}}<span class="dim">fftui {{.Version}}</span> · <span class="dim">state lives in the URL — every view works without JavaScript</span>
+</footer>
+<script src="/static/app.js"></script>
+</body>
+</html>

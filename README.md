@@ -130,6 +130,54 @@ FF_PASSWORD_CMD=op read op://Personal/FutureForex/password
 > Login is a two-step CSRF flow on a separate host that returns an
 > `arb_auth_token` (valid ~1 hour); `r` in the app re-mints and refreshes.
 
+## Web UI
+
+The same views are available in a browser: `--web` serves them alongside the
+TUI (the URL is printed before the TUI starts), and `--web --headless` serves
+them without the TUI — for leaving fftui running on a home server.
+
+```sh
+# Alongside the TUI:
+go run . --web
+
+# Headless, reachable from other machines (set a token first — see below):
+go run . --web --headless --addr 0.0.0.0:8442
+```
+
+Every page works without JavaScript — sort, filter, granularity and the
+dead-bucket toggle all live in query parameters, so views are bookmarkable.
+The refresh button re-pulls from the source (shared with the TUI's `r`).
+
+| Flag / var | Default | Purpose |
+|---|---|---|
+| `--web` | off | serve the web UI on `--addr` alongside the TUI |
+| `--headless` | off | with `--web`: no TUI; runs until SIGINT/SIGTERM |
+| `--addr` / `FF_WEB_ADDR` | `127.0.0.1:8442` | listen address |
+| `FF_WEB_TOKEN` | — | access token; auth is disabled when unset |
+
+### Access from a phone
+
+Set `FF_WEB_TOKEN` (any long random string) and bind beyond loopback
+(`--addr 0.0.0.0:8442`). Then open
+`http://<your-machine>:8442/cycles?token=<token>` once on the phone — the
+token is exchanged for an `HttpOnly` cookie and stripped from the URL, so it
+doesn't linger in the address bar or history. Scripts can send
+`Authorization: Bearer <token>` instead. Without a token on a non-loopback
+address, fftui prints a loud warning and serves your trading history
+unauthenticated — only do that on a network you trust.
+
+### Headless home-server recipe
+
+```sh
+FF_WEB_TOKEN=$(openssl rand -hex 24) ./fftui --web --headless --addr 0.0.0.0:8442
+```
+
+Login (and any OTP prompt) still happens on the terminal at startup, so if
+your account uses OTP, run fftui once interactively first to seed the cached
+login token, then start the headless server (or set `FF_TOKEN`). An initial
+refresh is attempted at startup; if it fails, the server starts anyway and
+every page offers a retry.
+
 ## Views
 
 `1` Cycles table · `2` Analytics · `3` Detail · `4` Charts. `?` toggles full
@@ -338,6 +386,9 @@ go test ./...
 main.go                      flag parsing, source selection, program start
 internal/model/              Cycle, CSVSource, live API source (+ auth)
 internal/analytics/          bucketing, annualisation, variance (+ regression tests)
+internal/data/               Service: fetch/cache seam shared by both front ends
+internal/format/             pure text formatters (money/percent/sparklines)
 internal/ui/                 root model, table/analytics/detail/charts views
+internal/webui/              the browser front end (--web): handlers + templates
 testdata/cycles.csv          reference export used by tests
 ```

@@ -10,6 +10,7 @@ import (
 	"github.com/charmbracelet/lipgloss"
 
 	"github.com/wolffshots/fftui/internal/analytics"
+	"github.com/wolffshots/fftui/internal/data"
 	"github.com/wolffshots/fftui/internal/model"
 )
 
@@ -25,14 +26,6 @@ const (
 
 var tabNames = []string{"Cycles", "Analytics", "Detail", "Charts", "Live"}
 
-// liveSpreadPeriod is the history window (days) for the Live view spread
-// sparkline; must be one of the API's allowed periods (1/7/30/90/365).
-const liveSpreadPeriod = 7
-
-// trendSpreadPeriod is the long history window (days) the analytics trend
-// strip compares recent spreads against; also an API-allowed period.
-const trendSpreadPeriod = 365
-
 // Messages emitted by the async fetch command. cyclesLoadedMsg carries the cycle
 // history plus the live-only extras (nil in CSV mode or if their pull failed).
 type cyclesLoadedMsg struct {
@@ -44,14 +37,9 @@ type cyclesLoadedMsg struct {
 }
 type fetchErrMsg struct{ err error }
 
-// Today returns the current local calendar date as a UTC-midnight time — the
-// same convention cycle dates are parsed with. Deriving it from the local date
-// (rather than truncating UTC time) avoids the early-morning off-by-one for
-// timezones ahead of UTC (e.g. SAST).
-func Today() time.Time {
-	y, m, d := time.Now().Date()
-	return time.Date(y, m, d, 0, 0, 0, 0, time.UTC)
-}
+// Today lives in internal/data; aliased here so existing callers (main.go)
+// stay unchanged.
+var Today = data.Today
 
 // LoadedMsg wraps a pre-fetched cycle set as an Update message, for embedding
 // the model with data already in hand (previews, tests).
@@ -60,9 +48,9 @@ func LoadedMsg(cs []model.Cycle) tea.Msg { return cyclesLoadedMsg{cycles: cs} }
 // RootModel is the top-level Bubble Tea model. It owns one sub-model per view
 // and routes updates to the active one.
 type RootModel struct {
-	source model.CycleSource
-	now    time.Time
-	rates  analytics.Rates
+	svc   *data.Service
+	now   time.Time
+	rates analytics.Rates
 
 	keys         keyMap
 	help         help.Model
@@ -91,13 +79,13 @@ type RootModel struct {
 // for the with-idle and after-tax annualised figures; allow carries the annual
 // SDA/FIA limits for the planning figures (a zero total disables them); fees is
 // the per-cycle fee schedule for the fee-aware capital projections.
-func New(source model.CycleSource, now time.Time, rates analytics.Rates, allow analytics.Allowances, fees analytics.Fees) RootModel {
+func New(svc *data.Service, now time.Time, rates analytics.Rates, allow analytics.Allowances, fees analytics.Fees) RootModel {
 	sp := spinner.New()
 	sp.Spinner = spinner.Dot
 	sp.Style = lipgloss.NewStyle().Foreground(accent)
 
 	return RootModel{
-		source:    source,
+		svc:       svc,
 		now:       now,
 		rates:     rates,
 		keys:      newKeyMap(),
@@ -114,34 +102,24 @@ func New(source model.CycleSource, now time.Time, rates analytics.Rates, allow a
 }
 
 func (m RootModel) Init() tea.Cmd {
-	return tea.Batch(m.spin.Tick, fetchCmd(m.source))
+	return tea.Batch(m.spin.Tick, fetchCmd(m.svc))
 }
 
-// fetchCmd runs the source fetch off the UI goroutine. For the live source it
-// also pulls the current-cycle status and market spread; those extras are
-// best-effort — if they fail, the cycles still load and the live view/status bar
-// just stay empty rather than failing the whole refresh.
-func fetchCmd(src model.CycleSource) tea.Cmd {
+// fetchCmd runs the service refresh off the UI goroutine and translates the
+// snapshot (or error) into the existing Bubble Tea messages.
+func fetchCmd(svc *data.Service) tea.Cmd {
 	return func() tea.Msg {
-		ctx, cancel := context.WithTimeout(context.Background(), 90*time.Second)
-		defer cancel()
-		cs, err := src.Fetch(ctx)
+		snap, err := svc.Refresh(context.Background())
 		if err != nil {
 			return fetchErrMsg{err}
 		}
-		msg := cyclesLoadedMsg{cycles: cs, now: Today()}
-		if ff, ok := src.(*model.LiveSource); ok {
-			if st, err := ff.FetchClient(ctx); err == nil {
-				msg.client = st
-			}
-			if mc, err := ff.FetchMarketConditions(ctx, liveSpreadPeriod); err == nil {
-				msg.market = mc
-			}
-			if mc, err := ff.FetchMarketConditions(ctx, trendSpreadPeriod); err == nil {
-				msg.marketYear = mc
-			}
+		return cyclesLoadedMsg{
+			cycles:     snap.Cycles,
+			client:     snap.Client,
+			market:     snap.Market,
+			marketYear: snap.MarketYear,
+			now:        snap.Now,
 		}
-		return msg
 	}
 }
 
@@ -225,7 +203,7 @@ func (m RootModel) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		}
 		m.loading = true
 		m.err = nil
-		return m, tea.Batch(m.spin.Tick, fetchCmd(m.source))
+		return m, tea.Batch(m.spin.Tick, fetchCmd(m.svc))
 
 	case keyMatches(msg, m.keys.Table):
 		m.active = viewTable

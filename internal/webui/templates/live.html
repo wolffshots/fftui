@@ -1,0 +1,42 @@
+{{define "content"}}
+<section class="live">
+{{if .CSVHint}}
+<p class="dim">live data is only available from the live API — run without --csv</p>
+{{else}}
+{{with .Client}}
+<h2>Current cycle</h2>
+<p><span class="dot {{.DotClass}}">●</span> <span class="val">{{.Label}}</span></p>
+{{if .Description}}<p class="dim">{{.Description}}</p>{{end}}
+<dl class="kv">
+  <dt>Amount invested</dt><dd>{{money .AmountInvested}}</dd>
+  <dt>Net profit so far</dt>{{if .HasNetProfit}}<dd class="{{signClass .NetProfit}}">{{money .NetProfit}}</dd>{{else}}<dd class="dim">— (still queued)</dd>{{end}}
+</dl>
+{{end}}
+{{with .Market}}
+<h2>Market conditions</h2>
+<dl class="kv">
+  <dt>Spread</dt><dd class="pos">{{spreadFmt .Spread}}</dd>
+  <dt>Local price</dt><dd>{{printf "%.4f" .LocalPrice}}</dd>
+  <dt>Offshore price</dt><dd>{{printf "%.4f" .OffshorePrice}}</dd>
+  <dt>Exchange rate</dt><dd>{{printf "%.4f" .ExchangeRate}}</dd>
+</dl>
+{{if .HasHistory}}
+<p class="dim">Spread, last {{.Period}}d</p>
+<pre class="spark pos">{{spark .Series .Width}}</pre>
+<p class="dim">min <span class="val">{{spreadFmt .Min}}</span> max <span class="val">{{spreadFmt .Max}}</span> latest <span class="val">{{spreadFmt .Latest}}</span></p>
+{{end}}
+{{end}}
+{{with .Client}}
+<h2>Funds &amp; allowances</h2>
+<dl class="kv">
+  <dt>Funds available</dt><dd>{{money .FundsAvailable}}</dd>
+  <dt>Total profit to date</dt><dd class="{{signClass .TotalProfit}}">{{money .TotalProfit}}</dd>
+  <dt>Minimum return</dt><dd>{{percent .MinimumReturn}}</dd>
+  <dt>SDA available</dt><dd>{{money .SDAAvailable}}</dd>
+  <dt>FIA available</dt><dd>{{money .FIAAvailable}}</dd>
+</dl>
+{{if .FundsUpdated}}<p class="dim">{{.FundsUpdated}}</p>{{end}}
+{{end}}
+{{end}}
+</section>
+{{end}}

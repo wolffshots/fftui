@@ -1,12 +1,9 @@
 package ui
 
 import (
-	"fmt"
-	"math"
-	"strconv"
-	"strings"
-
 	"github.com/charmbracelet/lipgloss"
+
+	"github.com/wolffshots/fftui/internal/format"
 )
 
 // Adaptive colours so the UI stays readable on dark and light terminals.
@@ -62,63 +59,14 @@ const warnMark = "⚠"
 
 // ---- formatters ------------------------------------------------------------
 
-// money formats a ZAR amount as R1,234.56.
-func money(v float64) string {
-	neg := v < 0
-	if neg {
-		v = -v
-	}
-	whole := int64(v)
-	frac := int64(math.Round((v - float64(whole)) * 100))
-	if frac == 100 { // rounding carry
-		whole++
-		frac = 0
-	}
-	s := "R" + groupThousands(whole) + "." + fmt.Sprintf("%02d", frac)
-	if neg {
-		return "-" + s
-	}
-	return s
-}
-
-// groupThousands inserts comma separators into a non-negative integer.
-func groupThousands(n int64) string {
-	s := strconv.FormatInt(n, 10)
-	if len(s) <= 3 {
-		return s
-	}
-	var b strings.Builder
-	pre := len(s) % 3
-	if pre > 0 {
-		b.WriteString(s[:pre])
-		if len(s) > pre {
-			b.WriteByte(',')
-		}
-	}
-	for i := pre; i < len(s); i += 3 {
-		b.WriteString(s[i : i+3])
-		if i+3 < len(s) {
-			b.WriteByte(',')
-		}
-	}
-	return b.String()
-}
-
-// percent formats a fractional value as a 2dp percentage, e.g. 6.25%.
-func percent(frac float64) string {
-	return fmt.Sprintf("%.2f%%", frac*100)
-}
-
-// points formats a fractional spread as percentage points, e.g. 19.9pts.
-func points(frac float64) string {
-	return fmt.Sprintf("%.1fpts", frac*100)
-}
-
-// spreadFmt formats a market spread that is ALREADY in percent units (the API
-// returns 0.82 to mean 0.82%), so unlike percent() it does not scale by 100.
-func spreadFmt(v float64) string {
-	return fmt.Sprintf("%.2f%%", v)
-}
+// The pure formatters live in internal/format; aliased here so ui call sites
+// stay unchanged.
+var (
+	money     = format.Money
+	percent   = format.Percent
+	points    = format.Points
+	spreadFmt = format.SpreadFmt
+)
 
 // colourReturn styles a fractional return green/red by sign.
 func colourReturn(frac float64) string {
