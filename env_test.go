@@ -3,6 +3,8 @@ package main
 import (
 	"os"
 	"path/filepath"
+	"runtime"
+	"strings"
 	"testing"
 )
 
@@ -39,6 +41,128 @@ func TestApplyDotEnv(t *testing.T) {
 		if got := os.Getenv(k); got != want {
 			t.Errorf("%s = %q, want %q", k, got, want)
 		}
+	}
+}
+
+func TestUserConfigPath(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		got := userConfigPath()
+		if !strings.HasSuffix(filepath.ToSlash(got), "fftui/config.env") {
+			t.Errorf("userConfigPath() = %q, want …/fftui/config.env", got)
+		}
+		return
+	}
+	// XDG_CONFIG_HOME override is honoured verbatim.
+	t.Setenv("XDG_CONFIG_HOME", "/xdg/here")
+	if got, want := userConfigPath(), "/xdg/here/fftui/config.env"; got != want {
+		t.Errorf("with XDG set: userConfigPath() = %q, want %q", got, want)
+	}
+	// Unset falls back to ~/.config.
+	t.Setenv("XDG_CONFIG_HOME", "")
+	home, err := os.UserHomeDir()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got, want := userConfigPath(), filepath.Join(home, ".config", "fftui", "config.env"); got != want {
+		t.Errorf("without XDG: userConfigPath() = %q, want %q", got, want)
+	}
+}
+
+// TestApplyDotEnvPrecedence documents the first-wins chain for the user config
+// file: a real env var beats it, and a cwd .env applied earlier beats it too.
+func TestApplyDotEnvPrecedence(t *testing.T) {
+	dir := t.TempDir()
+	cwdEnv := filepath.Join(dir, ".env")
+	userCfg := filepath.Join(dir, "config.env")
+	if err := os.WriteFile(cwdEnv, []byte("FF_USERNAME=from-cwd\nFF_BASE_URL=from-cwd\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(userCfg, []byte("FF_USERNAME=from-user\nFF_BASE_URL=from-user\nFF_AUTH_URL=from-user\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	t.Setenv("FF_USERNAME", "from-realenv") // real env must win over both files
+	os.Unsetenv("FF_BASE_URL")
+	os.Unsetenv("FF_AUTH_URL")
+
+	// Same order loadDotEnv uses: cwd .env, then user config (first-wins).
+	applyDotEnv(cwdEnv)
+	applyDotEnv(userCfg)
+
+	cases := map[string]string{
+		"FF_USERNAME": "from-realenv", // real env beats every file
+		"FF_BASE_URL": "from-cwd",     // cwd .env beats user config
+		"FF_AUTH_URL": "from-user",    // only user config sets it
+	}
+	for k, want := range cases {
+		if got := os.Getenv(k); got != want {
+			t.Errorf("%s = %q, want %q", k, got, want)
+		}
+	}
+}
+
+func TestInitConfig(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "sub", "config.env")
+
+	wrote, err := initConfig(path)
+	if err != nil {
+		t.Fatalf("initConfig: %v", err)
+	}
+	if !wrote {
+		t.Fatal("first initConfig should report wrote=true")
+	}
+	got, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("template not written: %v", err)
+	}
+	if string(got) != configTemplate {
+		t.Error("written file does not match configTemplate")
+	}
+
+	// Second call must not overwrite and must report wrote=false.
+	if err := os.WriteFile(path, []byte("SENTINEL=1\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	wrote, err = initConfig(path)
+	if err != nil {
+		t.Fatalf("second initConfig: %v", err)
+	}
+	if wrote {
+		t.Error("second initConfig should report wrote=false")
+	}
+	if got, _ := os.ReadFile(path); string(got) != "SENTINEL=1\n" {
+		t.Error("existing file was overwritten")
+	}
+}
+
+func TestResolvePasswordCmd(t *testing.T) {
+	echoCmd := "echo secret123"
+
+	// Success: FF_PASSWORD is set from the command's trimmed stdout.
+	t.Setenv("FF_PASSWORD", "")
+	t.Setenv("FF_PASSWORD_CMD", echoCmd)
+	if err := resolvePasswordCmd(); err != nil {
+		t.Fatalf("resolvePasswordCmd: %v", err)
+	}
+	if got := os.Getenv("FF_PASSWORD"); got != "secret123" {
+		t.Errorf("FF_PASSWORD = %q, want %q", got, "secret123")
+	}
+
+	// FF_PASSWORD already set takes precedence; the command must not run.
+	t.Setenv("FF_PASSWORD", "explicit")
+	t.Setenv("FF_PASSWORD_CMD", "echo should-not-run")
+	if err := resolvePasswordCmd(); err != nil {
+		t.Fatalf("resolvePasswordCmd: %v", err)
+	}
+	if got := os.Getenv("FF_PASSWORD"); got != "explicit" {
+		t.Errorf("FF_PASSWORD = %q, want explicit (command should not override)", got)
+	}
+
+	// Failure surfaces an error ("exit 1" works for both sh -c and cmd /C).
+	t.Setenv("FF_PASSWORD", "")
+	t.Setenv("FF_PASSWORD_CMD", "exit 1")
+	if err := resolvePasswordCmd(); err == nil {
+		t.Error("expected error from failing FF_PASSWORD_CMD")
 	}
 }
 

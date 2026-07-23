@@ -82,12 +82,40 @@ on the terminal before the UI opens. The minted token is then cached (in your OS
 cache dir, ~1h TTL) so later runs skip login — and the OTP — until it expires;
 `fftui --logout` clears it.
 
+#### User config file
+
+The same keys can live in a per-user config file, which fftui reads at the
+**lowest** precedence (flags > real env > `./.env` > exe-dir `.env` > user config).
+This is the convenient home for an installed binary — e.g. a Homebrew install
+whose executable sits in the Cellar and is wiped on each upgrade. Locations:
+
+- **Linux and macOS:** `$XDG_CONFIG_HOME/fftui/config.env`, defaulting to
+  `~/.config/fftui/config.env` when `XDG_CONFIG_HOME` is unset (the gh/lazygit
+  convention — used on macOS too, not `~/Library/Application Support`).
+- **Windows:** `%AppData%\fftui\config.env`.
+
+Run `fftui --init-config` to write a commented template of every supported key to
+that path (parent dir `0700`, file `0600`) and print the location. It never
+overwrites an existing file.
+
+#### Fetching the password from a command
+
+Rather than store `FF_PASSWORD` in plaintext, set `FF_PASSWORD_CMD` to a shell
+one-liner that prints the password on stdout; fftui runs it (only when
+`FF_PASSWORD` is unset) and uses the output, trailing whitespace trimmed. Handy
+with a secret manager such as the 1Password CLI:
+
+```
+FF_PASSWORD_CMD=op read op://Personal/FutureForex/password
+```
+
 ### Live-source environment variables
 
 | Var | Default | Purpose |
 |---|---|---|
 | `FF_TOKEN` | — | token (bare or `Token <token>`); skips login if set |
 | `FF_USERNAME` / `FF_PASSWORD` | — | mint a token via CSRF login when no token is set |
+| `FF_PASSWORD_CMD` | — | shell one-liner that prints the password; used only when `FF_PASSWORD` is unset (e.g. `op read op://Personal/FutureForex/password`) |
 | `FF_CLIENT_ID` | auto | client id; auto-detected from the account after login — set to override |
 | `FF_BASE_URL` | — | override the data API host |
 | `FF_AUTH_URL` | — | override the login host (CSRF + login) |

@@ -35,6 +35,7 @@ func main() {
 	feeTiers := flag.String("fee-tiers", envStr("FF_FEE_TIERS", ""), `FF success-fee tiers as "capital:percent,..." (e.g. "100000:35,200000:30,400000:25"); empty uses the built-in schedule`)
 	showVersion := flag.Bool("version", false, "print version and exit")
 	logout := flag.Bool("logout", false, "clear the cached login token and exit")
+	initConfigFlag := flag.Bool("init-config", false, "write a commented config template to the user config path and exit")
 	flag.Parse()
 
 	if *showVersion {
@@ -42,10 +43,36 @@ func main() {
 		return
 	}
 
+	if *initConfigFlag {
+		path := userConfigPath()
+		if path == "" {
+			fmt.Fprintln(os.Stderr, "could not determine user config path")
+			os.Exit(1)
+		}
+		wrote, err := initConfig(path)
+		if err != nil {
+			fmt.Fprintln(os.Stderr, "init-config failed:", err)
+			os.Exit(1)
+		}
+		if wrote {
+			fmt.Println("wrote config template to", path)
+		} else {
+			fmt.Println(path, "already exists, not overwriting")
+		}
+		return
+	}
+
 	if *logout {
 		model.NewLiveSource().Logout()
 		fmt.Println("cached login token cleared")
 		return
+	}
+
+	// Resolve FF_PASSWORD from FF_PASSWORD_CMD if needed (e.g. a 1Password
+	// `op read` one-liner) before anything tries to log in.
+	if err := resolvePasswordCmd(); err != nil {
+		fmt.Fprintln(os.Stderr, err)
+		os.Exit(1)
 	}
 
 	// Selection logic (§3): --csv → CSVSource, otherwise the live API source.
