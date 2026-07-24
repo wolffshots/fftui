@@ -215,6 +215,7 @@ type cyclesVM struct {
 }
 
 type colVM struct {
+	Key    string // tips key for the header's tooltip ("" = no tooltip)
 	Title  string
 	URL    string // "" for a non-sortable column (End)
 	Active bool
@@ -245,22 +246,23 @@ func cycleColumns(cur sortKey, asc bool, q string) []colVM {
 	}
 	defs := []struct {
 		title string
+		tip   string // tips key ("" = no tooltip)
 		key   sortKey
 		sort  bool
 	}{
-		{"Code", sortCode, true},
-		{"Type", sortType, true},
-		{"Start", sortStart, true},
-		{"End", 0, false},
-		{"ZAR In", sortZarIn, true},
-		{"ZAR Out", sortZarOut, true},
-		{"Profit", sortProfit, true},
-		{"Return%", sortReturn, true},
-		{"Days", sortDays, true},
+		{"Code", "", sortCode, true},
+		{"Type", "type", sortType, true},
+		{"Start", "", sortStart, true},
+		{"End", "", 0, false},
+		{"ZAR In", "zar-in", sortZarIn, true},
+		{"ZAR Out", "zar-out", sortZarOut, true},
+		{"Profit", "", sortProfit, true},
+		{"Return%", "return", sortReturn, true},
+		{"Days", "days", sortDays, true},
 	}
 	cols := make([]colVM, 0, len(defs))
 	for _, d := range defs {
-		col := colVM{Title: d.title}
+		col := colVM{Key: d.tip, Title: d.title}
 		if d.sort {
 			linkDir := dir(asc)
 			if d.key == cur {
@@ -337,6 +339,7 @@ type bucketVM struct {
 }
 
 type varianceVM struct {
+	Key                         string // tips key for the title's tooltip
 	Title                       string
 	Mean, Median, Std, Min, Max float64
 }
@@ -418,6 +421,7 @@ type chartsVM struct {
 }
 
 type chartVM struct {
+	Key              string // tips key for the title's tooltip ("" = none)
 	Title            string
 	Series           []float64
 	Width            int

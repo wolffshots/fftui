@@ -1,9 +1,12 @@
 package webui
 
 import (
+	"bytes"
 	"context"
+	"html/template"
 	"net/http"
 	"net/http/httptest"
+	"regexp"
 	"strings"
 	"sync"
 	"testing"
@@ -378,6 +381,86 @@ func TestConcurrentAccess(t *testing.T) {
 		}
 	}()
 	wg.Wait()
+}
+
+// TestTooltips checks the jargon tooltips render on each page: /analytics
+// carries the IRR and sweet-spot explanations, /cycles the footer terms. The
+// live page has no live data in CSV-mode tests, so its template is executed
+// directly with a populated view-model.
+func TestTooltips(t *testing.T) {
+	s, _ := newTestServer(t, "", true)
+
+	body := get(t, s, "/analytics").Body.String()
+	for _, want := range []string{
+		`role="tooltip"`,
+		"weights every stretch by the capital actually in it", // irr
+		"allowance pool runs out before the year does",        // sweet-spot
+	} {
+		if !strings.Contains(body, want) {
+			t.Errorf("analytics missing tooltip content %q", want)
+		}
+	}
+
+	if !strings.Contains(get(t, s, "/cycles").Body.String(), `role="tooltip"`) {
+		t.Error("cycles page missing tooltips")
+	}
+
+	var buf bytes.Buffer
+	vm := liveVM{
+		baseVM: baseVM{Title: "Live", Active: "live"},
+		Client: &liveClientVM{Label: "idle"},
+	}
+	if err := s.pages["live"].ExecuteTemplate(&buf, "base.html", vm); err != nil {
+		t.Fatalf("render live: %v", err)
+	}
+	live := buf.String()
+	if !strings.Contains(live, `role="tooltip"`) {
+		t.Error("live page missing tooltips")
+	}
+	if !strings.Contains(live, "Single Discretionary Allowance") {
+		t.Error("live page missing the SDA tip text")
+	}
+}
+
+// TestTipKeys guards the tips map against template drift: every key used as a
+// {{tip "…"}} literal in a template must exist, as must the keys handlers
+// inject as data. Unknown keys must degrade to the plain escaped label.
+func TestTipKeys(t *testing.T) {
+	re := regexp.MustCompile(`\{\{\s*tip\s+"([^"]+)"`)
+	entries, err := content.ReadDir("templates")
+	if err != nil {
+		t.Fatalf("read templates dir: %v", err)
+	}
+	seen := 0
+	for _, e := range entries {
+		data, err := content.ReadFile("templates/" + e.Name())
+		if err != nil {
+			t.Fatalf("read %s: %v", e.Name(), err)
+		}
+		for _, m := range re.FindAllStringSubmatch(string(data), -1) {
+			seen++
+			if _, ok := tips[m[1]]; !ok {
+				t.Errorf("%s uses tip key %q with no entry in tips", e.Name(), m[1])
+			}
+		}
+	}
+	if seen == 0 {
+		t.Error("no tip keys found in templates — scan regexp broken?")
+	}
+	// Keys passed as view-model data rather than template literals.
+	for _, k := range []string{
+		"variance", "variance-idle", "variance-net", // varianceVM.Key
+		"type", "zar-in", "zar-out", "return", "days", // colVM.Key
+		"monthly-annualised", // chartVM.Key
+	} {
+		if _, ok := tips[k]; !ok {
+			t.Errorf("handler-injected tip key %q missing from tips", k)
+		}
+	}
+
+	if got := tipHTML("no-such-key", "a<b"); got != template.HTML("a&lt;b") {
+		t.Errorf("unknown key should return the escaped label, got %q", got)
+	}
 }
 
 // TestTemplatesParse makes sure a bad Options set still constructs (template

@@ -18,6 +18,39 @@
     });
   }
 
+  // Info tooltips: tap/click toggles .open (the touch analogue of the CSS
+  // hover/focus path), any other tap or Escape closes them all.
+  var tips = document.querySelectorAll(".tip");
+  var closeTips = function (except) {
+    tips.forEach(function (t) {
+      if (t !== except) t.classList.remove("open");
+    });
+  };
+  var hoverable = window.matchMedia("(hover: hover)").matches;
+  tips.forEach(function (t) {
+    t.addEventListener("click", function (e) {
+      if (e.target.closest(".tipbox")) return; // reading, not toggling
+      if (t.closest("a")) {
+        // Tip inside a sortable-header link: on hover-capable devices the
+        // click sorts (hover already shows the tip); on touch, the first
+        // tap peeks at the tip and a second tap follows the link.
+        if (hoverable) return;
+        if (!t.classList.contains("open")) e.preventDefault();
+      }
+      closeTips(t);
+      t.classList.toggle("open");
+      if (!t.classList.contains("open")) t.blur(); // :focus would keep it shown
+    });
+  });
+  if (tips.length) {
+    document.addEventListener("click", function (e) {
+      if (!e.target.closest(".tip")) closeTips(null);
+    });
+    document.addEventListener("keydown", function (e) {
+      if (e.key === "Escape") closeTips(null);
+    });
+  }
+
   // Keybindings, mirroring the TUI: 1/2/4/5 switch views, r refreshes,
   // / focuses the filter. Skipped while typing in a form field.
   var nav = { "1": "/cycles", "2": "/analytics", "4": "/charts", "5": "/live" };

@@ -9,9 +9,9 @@
 <div class="tablewrap">
 <table class="buckets">
 <thead><tr>
-  <th>Period</th><th class="num">Cyc</th><th class="num">Profit R</th>
-  <th class="num">Compound%</th><th class="num">Annualised%</th>
-  <th class="num">{{.IdleHdr}}</th><th class="num">{{.NetHdr}}</th><th></th>
+  <th>Period</th><th class="num">{{tip "cyc" "Cyc"}}</th><th class="num">Profit R</th>
+  <th class="num">{{tip "compound" "Compound%"}}</th><th class="num">{{tip "annualised" "Annualised%"}}</th>
+  <th class="num">{{tip "idle" .IdleHdr}}</th><th class="num">{{tip "net" .NetHdr}}</th><th></th>
 </tr></thead>
 <tbody>
 {{range .Buckets}}
@@ -32,7 +32,7 @@
 
 <div class="strip variance">
 {{range .Variances}}
-<div class="vrow"><span class="stitle">{{.Title}}</span>
+<div class="vrow"><span class="stitle">{{tip .Key .Title}}</span>
   <span class="dim">mean</span> <span class="val">{{percent .Mean}}</span>
   <span class="dim">median</span> <span class="val">{{percent .Median}}</span>
   <span class="dim">std</span> <span class="val">{{points .Std}}</span>
@@ -43,20 +43,20 @@
 <p class="dim scope">scope: {{.Scope}} (<a href="{{.DeadURL}}">toggle</a>) · stats over {{.VarN}} full buckets · idle {{.IdlePct}}/yr on non-trading days · tax {{.TaxPct}} on returns</p>
 
 {{with .MW}}
-<p class="strip mw"><span class="stitle">money-weighted (IRR)</span>
+<p class="strip mw"><span class="stitle">{{tip "irr" "money-weighted (IRR)"}}</span>
   <span class="dim">lifetime, capital-weighted, arb-only:</span> <span class="{{signClass .Rate}}">{{percent .Rate}}</span>
   <span class="dim">vs time-weighted</span> <span class="{{signClass .TimeWeighted}}">{{percent .TimeWeighted}}</span></p>
 {{end}}
 
 {{with .Boot}}
-<p class="strip boot"><span class="stitle">bootstrap 90% band</span>
+<p class="strip boot"><span class="stitle">{{tip "bootstrap" "bootstrap 90% band"}}</span>
   <span class="dim">arb-only</span> <span class="val">{{percent .ArbLo}}–{{percent .ArbHi}}</span>
   <span class="dim">net</span> <span class="val">{{percent .NetLo}}–{{percent .NetHi}}</span>
   <span class="dim">({{.N}} resamples of the cycle returns, cadence fixed)</span></p>
 {{end}}
 
 {{with .Floor}}
-<p class="strip floor"><span class="stitle">{{.Label}} floor</span>
+<p class="strip floor"><span class="stitle">{{tip "floor" (printf "%s floor" .Label)}}</span>
   <span class="dim">(no more trades, remainder idle → definitely beat this):</span>
   <span class="dim">+idle</span> <span class="{{signClass .Floor}}">{{percent .Floor}}</span>
   <span class="dim">net</span> <span class="{{signClass .FloorTax}}">{{percent .FloorTax}}</span>
@@ -65,12 +65,12 @@
 
 {{with .Plan}}
 <div class="strip plan">
-<div class="prow"><span class="stitle">{{.TaxYearLabel}} taxable profit</span>
+<div class="prow"><span class="stitle">{{tip "taxable" (printf "%s taxable profit" .TaxYearLabel)}}</span>
   <span class="{{signClass .TaxYearProfit}}">{{money .TaxYearProfit}}</span>
   <span class="dim">est. tax @{{.TaxPct}}</span> <span class="val">{{money .EstimatedTax}}</span>
   <span class="dim">(profit lands in the tax year the cycle ends)</span></div>
 {{if .HasAllowance}}
-<div class="prow"><span class="stitle">allowance {{.Year}}</span>
+<div class="prow"><span class="stitle">{{tip "allowance" (printf "allowance %d" .Year)}}</span>
   <span class="dim">used</span> <span class="val">{{money .Used}}</span>
   <span class="dim">of {{money .TotalLimit}}</span> <span class="val">{{percent .UsedFrac}}</span>
   {{if .Exhausted}}<span class="warn">exhausted — no more cycles this calendar year</span>
@@ -78,23 +78,23 @@
   {{else}}<span class="dim">lasts the year at the current pace</span>{{end}}</div>
 {{if .Live}}
 <div class="prow"><span class="stitle"></span>
-  <span class="dim">SDA left</span> <span class="val">{{money .SDAAvailable}}</span>
-  <span class="dim">·</span> <span class="dim">FIA left</span> <span class="val">{{money .FIAAvailable}}</span>
+  <span class="dim">{{tip "sda" "SDA left"}}</span> <span class="val">{{money .SDAAvailable}}</span>
+  <span class="dim">·</span> <span class="dim">{{tip "fia" "FIA left"}}</span> <span class="val">{{money .FIAAvailable}}</span>
   <span class="dim">(live · FIA via FF's AIT filings)</span></div>
 {{else}}
 <div class="prow"><span class="stitle"></span>
   <span class="dim">usage inferred from cycle history — live SDA/FIA split needs the live source</span></div>
 {{end}}
 {{if .HasSweetSpot}}
-<div class="prow"><span class="stitle">capital sweet spot</span>
+<div class="prow"><span class="stitle">{{tip "sweet-spot" "capital sweet spot"}}</span>
   <span class="val">{{money .SweetSpot}}</span><span class="dim">/cycle at {{.CyclesPerYear}} cycles/yr — the combined allowance binds above this</span></div>
-<div class="prow"><span class="stitle">current capital</span>
+<div class="prow"><span class="stitle">{{tip "capital" "current capital"}}</span>
   <span class="val">{{money .CurrentCapital}}</span>
   {{if .AboveSpot}}<span class="warn">above the spot</span> <span class="dim">— +R100k ≈ +{{money .Extra100kGross}}/yr gross, {{money .Extra100kNet}} net (fee-tier effect only)</span>
   {{else}}<span class="dim">below the spot — +R100k ≈ +{{money .Extra100kGross}}/yr gross, {{money .Extra100kNet}} net</span>{{end}}</div>
 {{end}}
 {{if .HasFeeLadder}}
-<div class="prow"><span class="stitle">fee ladder</span>
+<div class="prow"><span class="stitle">{{tip "fee-ladder" "fee ladder"}}</span>
   <span class="dim">FF fee</span> <span class="val">{{percent .CurrentTier}}</span>
   <span class="dim">of gross now →</span> <span class="val">{{percent .TopTier}}</span>
   <span class="dim">at {{money .TopTierMin}}+ · net/cycle</span>
@@ -108,14 +108,14 @@
 
 {{with .Trend}}
 <div class="strip trend">
-<div class="prow"><span class="stitle">return trend</span>
+<div class="prow"><span class="stitle">{{tip "return-trend" "return trend"}}</span>
   <span class="{{if .SlopeWarn}}warn{{else}}val{{end}}">{{.Slope}}</span><span class="dim">/cycle per 90d over {{.N}} cycles — {{.Verdict}}</span></div>
 <div class="prow"><span class="stitle">90d vs prior 90d</span>
   <span class="dim">annualised</span> <span class="{{signClass .Recent90}}">{{percent .Recent90}}</span>
   <span class="dim">vs</span> <span class="{{signClass .Prior90}}">{{percent .Prior90}}</span>
   <span class="dim">· cadence {{.RecentCycles}} vs {{.PriorCycles}} cycles</span></div>
 {{with .Spread}}
-<div class="prow"><span class="stitle">market spread</span>
+<div class="prow"><span class="stitle">{{tip "spread-trend" "market spread"}}</span>
   <span class="dim">30d avg</span> <span class="val">{{spreadFmt .Recent}}</span>
   <span class="dim">vs {{.PeriodDays}}d avg</span> <span class="val">{{spreadFmt .Overall}}</span>
   <span class="dim">(from the live market-conditions feed)</span></div>

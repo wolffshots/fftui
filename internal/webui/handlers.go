@@ -196,13 +196,13 @@ func (s *Server) handleAnalytics(w http.ResponseWriter, r *http.Request) {
 	// Variance strips: arb-only, with-idle, and after-tax take-home.
 	v := analytics.Variance(buckets)
 	vm.VarN = v.N
-	varLine := func(title string, vs analytics.VarianceStats) varianceVM {
-		return varianceVM{Title: title, Mean: vs.Mean, Median: vs.Median, Std: vs.Std, Min: vs.Min, Max: vs.Max}
+	varLine := func(key, title string, vs analytics.VarianceStats) varianceVM {
+		return varianceVM{Key: key, Title: title, Mean: vs.Mean, Median: vs.Median, Std: vs.Std, Min: vs.Min, Max: vs.Max}
 	}
 	vm.Variances = []varianceVM{
-		varLine(gran.String()+" variance", v),
-		varLine(fmt.Sprintf("+idle@%.0f%%", rates.Idle*100), analytics.VarianceWithIdle(buckets)),
-		varLine(fmt.Sprintf("net@%.0f%% (after tax)", rates.Tax*100), analytics.VarianceWithIdleAfterTax(buckets)),
+		varLine("variance", gran.String()+" variance", v),
+		varLine("variance-idle", fmt.Sprintf("+idle@%.0f%%", rates.Idle*100), analytics.VarianceWithIdle(buckets)),
+		varLine("variance-net", fmt.Sprintf("net@%.0f%% (after tax)", rates.Tax*100), analytics.VarianceWithIdleAfterTax(buckets)),
 	}
 
 	if mwr, ok := analytics.MoneyWeighted(snap.Cycles); ok {
@@ -366,6 +366,7 @@ func (s *Server) handleCharts(w http.ResponseWriter, r *http.Request) {
 		chart("Monthly annualised rate", monthlyAnn, format.Percent),
 		chart("Cumulative profit", cum, format.Money),
 	}
+	vm.Charts[1].Key = "monthly-annualised"
 	s.render(w, "charts", vm)
 }
 

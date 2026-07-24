@@ -67,6 +67,7 @@ func New(svc *data.Service, opts Options) (*Server, error) {
 		"spreadFmt": format.SpreadFmt,
 		"spark":     format.Sparkline,
 		"signClass": signClass,
+		"tip":       tipHTML,
 	}
 	for _, page := range []string{"cycles", "detail", "analytics", "charts", "live"} {
 		t, err := template.New("base.html").Funcs(funcs).ParseFS(content,

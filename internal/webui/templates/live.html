@@ -15,7 +15,7 @@
 {{with .Market}}
 <h2>Market conditions</h2>
 <dl class="kv">
-  <dt>Spread</dt><dd class="pos">{{spreadFmt .Spread}}</dd>
+  <dt>{{tip "spread" "Spread"}}</dt><dd class="pos">{{spreadFmt .Spread}}</dd>
   <dt>Local price</dt><dd>{{printf "%.4f" .LocalPrice}}</dd>
   <dt>Offshore price</dt><dd>{{printf "%.4f" .OffshorePrice}}</dd>
   <dt>Exchange rate</dt><dd>{{printf "%.4f" .ExchangeRate}}</dd>
@@ -31,9 +31,9 @@
 <dl class="kv">
   <dt>Funds available</dt><dd>{{money .FundsAvailable}}</dd>
   <dt>Total profit to date</dt><dd class="{{signClass .TotalProfit}}">{{money .TotalProfit}}</dd>
-  <dt>Minimum return</dt><dd>{{percent .MinimumReturn}}</dd>
-  <dt>SDA available</dt><dd>{{money .SDAAvailable}}</dd>
-  <dt>FIA available</dt><dd>{{money .FIAAvailable}}</dd>
+  <dt>{{tip "min-return" "Minimum return"}}</dt><dd>{{percent .MinimumReturn}}</dd>
+  <dt>{{tip "sda" "SDA available"}}</dt><dd>{{money .SDAAvailable}}</dd>
+  <dt>{{tip "fia" "FIA available"}}</dt><dd>{{money .FIAAvailable}}</dd>
 </dl>
 {{if .FundsUpdated}}<p class="dim">{{.FundsUpdated}}</p>{{end}}
 {{end}}

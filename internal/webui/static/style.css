@@ -227,6 +227,50 @@ pre.spark {
   pre.spark { font-size: 9px; }
 }
 
+/* ---- info tooltips ------------------------------------------------------
+   Jargon terms wrapped by the `tip` template func. Hover/focus works with no
+   JS; app.js adds the .open tap toggle for touch screens. */
+
+.tip {
+  position: relative;
+  border-bottom: 1px dotted var(--dim);
+  cursor: help;
+}
+.tipbox {
+  display: none;
+  position: absolute;
+  left: 0;
+  top: calc(100% + 4px);
+  z-index: 10;
+  width: max-content;
+  max-width: min(44ch, calc(100vw - 4ch));
+  background: var(--bg);
+  border: 1px solid var(--dim);
+  border-radius: 6px;
+  padding: 4px 1ch;
+  color: var(--fg);
+  font-weight: 400;
+  text-align: left;
+  white-space: normal;
+}
+.tip:hover .tipbox,
+.tip:focus .tipbox,
+.tip:focus-within .tipbox,
+.tip.open .tipbox { display: block; }
+@media (max-width: 640px) {
+  /* Full-width bottom banner: absolute positioning inside .tablewrap or a
+     narrow strip would clip or overflow the 375px viewport. */
+  .tipbox {
+    position: fixed;
+    left: 1ch;
+    right: 1ch;
+    top: auto;
+    bottom: 8px;
+    width: auto;
+    max-width: none;
+  }
+}
+
 /* ---- footer (footerStyle) ---------------------------------------------- */
 
 .pagefoot {
