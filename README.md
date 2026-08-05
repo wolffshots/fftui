@@ -183,7 +183,10 @@ every page offers a retry.
 `1` Cycles table · `2` Analytics · `3` Detail · `4` Charts. `?` toggles full
 help; `r` refreshes; `q` quits.
 
-- **Table** — all cycles; `s`/`S` sort, `/` filter, `enter` opens detail.
+- **Table** — all cycles; `s`/`S` sort, `/` filter, `enter` opens detail. The
+  `Spread%` column is the effective spread the cycle caught (gross earnings
+  over capital), modelled from the fee waterfall since the export only carries
+  net figures.
 - **Analytics** — Year/Quarter/Month/Tax-year (`tab`) buckets with compound +
   annualised columns, a variance strip (`a` toggles active-only vs incl-dead
   buckets), a lifetime money-weighted (IRR) line, a bootstrap 90% band on the
@@ -191,8 +194,10 @@ help; `r` refreshes; `q` quits.
   runway, capital sweet spot, fee ladder), a trend strip (return decay test,
   90-day rate/cadence comparison, live market-spread drift), and a ⚠ flag on
   partial periods whose annualised figure is unreliable.
-- **Detail** — one cycle, including its hold-days ("best-case, no-idle")
-  annualisation, explicitly separated from the savings-comparable headline rate.
+- **Detail** — one cycle, including its gross earnings spread and gross profit
+  (both modelled, see the fee model below) and its hold-days ("best-case,
+  no-idle") annualisation, explicitly separated from the savings-comparable
+  headline rate.
 - **Charts** — braille/block sparklines for per-cycle return, monthly annualised
   rate, and cumulative profit.
 

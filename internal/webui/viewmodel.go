@@ -226,6 +226,7 @@ type cycleRowVM struct {
 	Code, Type, Start, End string
 	ZarIn, ZarOut, Profit  float64
 	Return                 float64
+	Spread                 float64 // gross earnings, modelled from the fee waterfall
 	Days                   int
 }
 
@@ -258,6 +259,7 @@ func cycleColumns(cur sortKey, asc bool, q string) []colVM {
 		{"ZAR Out", "zar-out", sortZarOut, true},
 		{"Profit", "", sortProfit, true},
 		{"Return%", "return", sortReturn, true},
+		{"Spread%", "gross-earnings", 0, false},
 		{"Days", "days", sortDays, true},
 	}
 	cols := make([]colVM, 0, len(defs))
@@ -295,6 +297,8 @@ type detailCycleVM struct {
 	Days                   int
 	ZarIn, ZarOut, Profit  float64
 	Return, AnnualisedHold float64
+	// Modelled from the fee waterfall — the export carries net figures only.
+	Gross, GrossReturn, Spread float64
 }
 
 // ---------------------------------------------------------------------------

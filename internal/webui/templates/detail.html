@@ -6,10 +6,14 @@
   <dt>Hold days</dt><dd>{{.Cycle.Days}}</dd>
   <dt>ZAR in</dt><dd>{{money .Cycle.ZarIn}}</dd>
   <dt>ZAR out</dt><dd>{{money .Cycle.ZarOut}}</dd>
+  <dt>{{tip "gross-earnings" "Gross earnings (spread)"}}</dt><dd>{{percent .Cycle.Spread}}</dd>
+  <dt>{{tip "gross" "Gross profit"}}</dt><dd class="{{signClass .Cycle.Gross}}">{{money .Cycle.Gross}} <span class="dim">{{percent .Cycle.GrossReturn}}</span></dd>
   <dt>Net profit</dt><dd class="{{signClass .Cycle.Profit}}">{{money .Cycle.Profit}}</dd>
   <dt>Return</dt><dd class="{{signClass .Cycle.Return}}">{{percent .Cycle.Return}}</dd>
   <dt>Annualised (hold-days)</dt><dd class="{{signClass .Cycle.AnnualisedHold}}">{{percent .Cycle.AnnualisedHold}}</dd>
 </dl>
+<p class="dim note">gross figures are modelled from the configured fee schedule, not reported by
+the cycle export — they match the cycle statement only while that schedule matches what FF billed.</p>
 <p class="dim note">best-case, no-idle basis: this single cycle's return compounded over its
 hold days only. NOT comparable to a savings rate — the analytics view's
 annualised figures (which include idle time) are the honest comparison.</p>

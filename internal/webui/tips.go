@@ -89,6 +89,18 @@ var tips = map[string]string{
 	"return": "The simple per-cycle return: net profit divided by the ZAR " +
 		"put in. Not annualised, so it is not comparable to the annualised " +
 		"figures.",
+	"gross-earnings": "The effective spread the cycle caught: gross earnings " +
+		"as a share of the ZAR put in, before any fees. This is the same " +
+		"quantity the live market-conditions feed quotes, measured on the " +
+		"trade that actually happened. The cycle export only carries net " +
+		"figures, so it is backed out of the configured fee schedule and " +
+		"matches the cycle statement only while that schedule matches what " +
+		"FF billed.",
+	"gross": "Gross profit as a share of the ZAR put in — the cycle's profit " +
+		"after third-party bank and offshore fees but before Future Forex's " +
+		"success fee. The cycle export only carries net figures, so this is " +
+		"backed out of the configured fee schedule and matches the cycle " +
+		"statement only while that schedule matches what FF billed.",
 	"days": "Calendar days the cycle was open, counting both the start and " +
 		"end date — a same-day cycle shows 1.",
 	"monthly-annualised": "Each month's arb-only annualised rate. Months " +

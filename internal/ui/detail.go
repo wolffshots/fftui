@@ -8,19 +8,21 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 
+	"github.com/wolffshots/fftui/internal/analytics"
 	"github.com/wolffshots/fftui/internal/model"
 )
 
 type detailModel struct {
 	vp     viewport.Model
 	cycle  model.Cycle
+	fees   analytics.Fees
 	hasSel bool
 	width  int
 	height int
 }
 
-func newDetailModel() detailModel {
-	return detailModel{vp: viewport.New(0, 0)}
+func newDetailModel(fees analytics.Fees) detailModel {
+	return detailModel{vp: viewport.New(0, 0), fees: fees}
 }
 
 func (m *detailModel) setSize(w, h int) {
@@ -66,8 +68,18 @@ func (m detailModel) render() string {
 
 	b.WriteString(row("ZAR in", money(c.ZarIn)) + "\n")
 	b.WriteString(row("ZAR out", money(c.ZarOut)) + "\n")
+
+	// The export only carries net figures; the gross lines are backed out of the
+	// fee waterfall, so they match the cycle statement only while the configured
+	// fee schedule matches the one FF billed.
+	gross := m.fees.GrossProfit(c.NetProfit, c.ZarIn)
+	b.WriteString(row("Gross earnings (spread)", percent(m.fees.Spread(c.NetProfit, c.ZarIn))) + "\n")
+	b.WriteString(row("Gross profit", colourMoney(gross)+
+		dimStyle.Render("  "+percent(m.fees.GrossReturn(c.NetProfit, c.ZarIn)))) + "\n")
 	b.WriteString(row("Net profit", colourMoney(c.NetProfit)) + "\n")
-	b.WriteString(row("Return", colourReturn(c.Return())) + "\n\n")
+	b.WriteString(row("Return", colourReturn(c.Return())) + "\n")
+	b.WriteString(dimStyle.Render("gross figures are modelled from the fee schedule, not reported by the\n"+
+		"export — see the fee model in the README") + "\n\n")
 
 	// Holding-days annualisation — best-case, no-idle. Explicitly labelled so it
 	// isn't mistaken for the savings-comparable headline rate.

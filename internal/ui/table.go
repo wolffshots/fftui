@@ -40,11 +40,12 @@ type tableModel struct {
 	filtering bool
 	summary   analytics.Summary
 	rates     analytics.Rates
+	fees      analytics.Fees
 	width     int
 	height    int
 }
 
-func newTableModel(rates analytics.Rates) tableModel {
+func newTableModel(rates analytics.Rates, fees analytics.Fees) tableModel {
 	ti := textinput.New()
 	ti.Placeholder = "filter by code or type…"
 	ti.Prompt = "/"
@@ -73,6 +74,7 @@ func newTableModel(rates analytics.Rates) tableModel {
 		sortAsc: false, // default: newest first
 		filter:  ti,
 		rates:   rates,
+		fees:    fees,
 	}
 }
 
@@ -88,6 +90,7 @@ func tableColumns() []table.Column {
 		{Title: "ZAR Out", Width: 14},
 		{Title: "Profit", Width: 12},
 		{Title: "Return%", Width: 9},
+		{Title: "Spread%", Width: 9},
 		{Title: "Days", Width: 5},
 	}
 }
@@ -139,6 +142,10 @@ func (m *tableModel) rebuild() {
 			// embedded colour codes corrupt the layout; keep this cell plain and
 			// right-aligned. Green returns still appear in the footer and detail.
 			rightPad(percent(c.Return()), 7),
+			// Gross earnings over capital — the effective spread the cycle
+			// caught, modelled from the fee waterfall since the export only
+			// carries net figures.
+			rightPad(percent(m.fees.Spread(c.NetProfit, c.ZarIn)), 7),
 			rightPad(strconv.Itoa(c.HoldDays()), 4),
 		}
 	}

@@ -71,6 +71,21 @@ func (f Fees) Spread(net, capital float64) float64 {
 	if capital <= 0 {
 		return 0
 	}
-	grossProfit := net / (1 - f.TierRate(capital))
-	return (grossProfit+f.Fixed)/capital + f.Variable
+	return (f.GrossProfit(net, capital)+f.Fixed)/capital + f.Variable
+}
+
+// GrossProfit inverts the success fee only: the gross profit (the statement
+// line after third-party fees, before FF's share) implied by an observed net
+// profit at a known capital.
+func (f Fees) GrossProfit(net, capital float64) float64 {
+	return net / (1 - f.TierRate(capital))
+}
+
+// GrossReturn is GrossProfit as a fraction of capital — the percentage next to
+// the statement's Gross Profit line.
+func (f Fees) GrossReturn(net, capital float64) float64 {
+	if capital <= 0 {
+		return 0
+	}
+	return f.GrossProfit(net, capital) / capital
 }

@@ -57,6 +57,7 @@ func (s *Server) handleCycles(w http.ResponseWriter, r *http.Request) {
 			ZarOut: c.ZarOut,
 			Profit: c.NetProfit,
 			Return: c.Return(),
+			Spread: s.opts.Fees.Spread(c.NetProfit, c.ZarIn),
 			Days:   c.HoldDays(),
 		}
 	}
@@ -97,6 +98,9 @@ func (s *Server) handleDetail(w http.ResponseWriter, r *http.Request) {
 				Profit:         c.NetProfit,
 				Return:         c.Return(),
 				AnnualisedHold: c.AnnualisedHold(),
+				Gross:          s.opts.Fees.GrossProfit(c.NetProfit, c.ZarIn),
+				GrossReturn:    s.opts.Fees.GrossReturn(c.NetProfit, c.ZarIn),
+				Spread:         s.opts.Fees.Spread(c.NetProfit, c.ZarIn),
 			}
 			s.render(w, "detail", vm)
 			return

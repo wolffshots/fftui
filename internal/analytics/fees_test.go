@@ -49,6 +49,9 @@ func TestFeesReproduceStatement(t *testing.T) {
 	// The statement rounds net to the cent, which perturbs the inverted spread
 	// by up to ~(0.005/(1-0.30))/capital ≈ 3e-8.
 	assertClose(t, "statement spread back-out", f.Spread(net, capital), spread, 1e-7)
+	// The gross figures shown in the cycle list and detail view.
+	assertClose(t, "statement gross profit", f.GrossProfit(net, capital), 2_528.98, 0.01)
+	assertClose(t, "statement gross return", f.GrossReturn(net, capital), 0.0105, 0.00005)
 }
 
 func TestSpreadNetRoundtrip(t *testing.T) {

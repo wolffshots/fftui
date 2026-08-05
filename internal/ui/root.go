@@ -93,9 +93,9 @@ func New(svc *data.Service, now time.Time, rates analytics.Rates, allow analytic
 		spin:      sp,
 		loading:   true,
 		active:    viewTable,
-		table:     newTableModel(rates),
+		table:     newTableModel(rates, fees),
 		analytics: newAnalyticsModel(now, rates, allow, fees),
-		detail:    newDetailModel(),
+		detail:    newDetailModel(fees),
 		charts:    newChartsModel(now, rates),
 		live:      newLiveModel(),
 	}
