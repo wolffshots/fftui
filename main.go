@@ -27,6 +27,11 @@ import (
 // version is overridden at release build time via -ldflags "-X main.version=…".
 var version = "dev"
 
+// minRefreshInterval is the floor for --refresh-interval: a live refresh is
+// several API round trips, so anything tighter just hammers the brokerage for
+// data that changes on the order of days.
+const minRefreshInterval = 30 * time.Second
+
 func main() {
 	// Load credentials/config from a .env file first (real env vars still win),
 	// so FF_IDLE_RATE can seed the flag default.
@@ -43,6 +48,7 @@ func main() {
 	feeTiers := flag.String("fee-tiers", envStr("FF_FEE_TIERS", ""), `FF success-fee tiers as "capital:percent,..." (e.g. "100000:35,200000:30,400000:25"); empty uses the built-in schedule`)
 	fromStr := flag.String("from", envStr("FF_FROM", ""), "only show cycles active on or after this date (YYYY-MM-DD); empty = no lower bound")
 	toStr := flag.String("to", envStr("FF_TO", ""), "only show cycles active on or before this date (YYYY-MM-DD); empty = no upper bound")
+	refreshEvery := flag.Duration("refresh-interval", envDuration("FF_REFRESH_INTERVAL", 0), "re-fetch automatically at this interval (e.g. 30s, 5m); 0 disables it")
 	web := flag.Bool("web", false, "serve the web UI on --addr alongside the TUI")
 	headless := flag.Bool("headless", false, "with --web: serve the web UI only (no TUI); runs until SIGINT/SIGTERM")
 	addr := flag.String("addr", envStr("FF_WEB_ADDR", "127.0.0.1:8442"), "listen address for the web UI (--web)")
@@ -53,22 +59,6 @@ func main() {
 
 	if *headless && !*web {
 		fmt.Fprintln(os.Stderr, "--headless requires --web")
-		os.Exit(1)
-	}
-
-	// Validate the date window up front so a typo fails before any login/OTP.
-	from, err := parseDate("--from", *fromStr)
-	if err != nil {
-		fmt.Fprintln(os.Stderr, err)
-		os.Exit(1)
-	}
-	to, err := parseDate("--to", *toStr)
-	if err != nil {
-		fmt.Fprintln(os.Stderr, err)
-		os.Exit(1)
-	}
-	if !from.IsZero() && !to.IsZero() && to.Before(from) {
-		fmt.Fprintf(os.Stderr, "--to %s is before --from %s\n", *toStr, *fromStr)
 		os.Exit(1)
 	}
 
@@ -100,6 +90,29 @@ func main() {
 		model.NewLiveSource().Logout()
 		fmt.Println("cached login token cleared")
 		return
+	}
+
+	// After the exit-early modes so a config-seeded date window or interval
+	// can't break --version/--init-config/--logout — including --init-config,
+	// the command you reach for to repair a bad config — but still before any
+	// login/OTP, so a typo fails without costing an OTP round trip.
+	from, err := parseDate("--from", *fromStr)
+	if err != nil {
+		fmt.Fprintln(os.Stderr, err)
+		os.Exit(1)
+	}
+	to, err := parseDate("--to", *toStr)
+	if err != nil {
+		fmt.Fprintln(os.Stderr, err)
+		os.Exit(1)
+	}
+	if !from.IsZero() && !to.IsZero() && to.Before(from) {
+		fmt.Fprintf(os.Stderr, "--to %s is before --from %s\n", *toStr, *fromStr)
+		os.Exit(1)
+	}
+	if *refreshEvery != 0 && *refreshEvery < minRefreshInterval {
+		fmt.Fprintf(os.Stderr, "--refresh-interval %s is below the %s minimum\n", *refreshEvery, minRefreshInterval)
+		os.Exit(1)
 	}
 
 	// Selection logic (§3): --csv → CSVSource, otherwise the live API source.
@@ -183,6 +196,26 @@ func main() {
 		if *headless {
 			ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 			defer stop()
+			if *refreshEvery > 0 {
+				// No TUI to drive the auto-refresh tick here, so re-fetch the
+				// shared service directly. Best-effort like the initial fetch:
+				// a failure keeps the last good snapshot and shows the page's
+				// error banner. Ticking and fetching on ctx means a
+				// SIGINT/SIGTERM ends the loop and cancels an in-flight fetch
+				// rather than leaving both running through shutdown.
+				go func() {
+					tick := time.NewTicker(*refreshEvery)
+					defer tick.Stop()
+					for {
+						select {
+						case <-ctx.Done():
+							return
+						case <-tick.C:
+							_, _ = svc.Refresh(ctx)
+						}
+					}
+				}()
+			}
 			select {
 			case <-ctx.Done():
 			case err := <-webErr:
@@ -194,7 +227,7 @@ func main() {
 		}
 	}
 
-	p := tea.NewProgram(ui.New(svc, now, rates, allow, fees), tea.WithAltScreen())
+	p := tea.NewProgram(ui.New(svc, now, rates, allow, fees, *refreshEvery), tea.WithAltScreen())
 	_, runErr := p.Run()
 	if websrv != nil {
 		shutdownWeb(websrv, webErr)
@@ -305,6 +338,22 @@ func envFloat(name string, def float64) float64 {
 		if f, err := strconv.ParseFloat(v, 64); err == nil {
 			return f
 		}
+	}
+	return def
+}
+
+// envDuration reads a Go duration from an env var (e.g. "30s", "5m"), falling
+// back to def when unset or unparseable. Unlike envFloat it warns on stderr
+// before falling back: a wrong rate still shows a wrong number the user can
+// notice, but a wrong interval leaves the feature it configures off with
+// nothing on screen to say so. Used as a flag default so env seeds it and an
+// explicit flag still overrides.
+func envDuration(name string, def time.Duration) time.Duration {
+	if v := os.Getenv(name); v != "" {
+		if d, err := time.ParseDuration(v); err == nil {
+			return d
+		}
+		fmt.Fprintf(os.Stderr, "bad %s: %q is not a Go duration (e.g. 30s, 5m); falling back to %s\n", name, v, def)
 	}
 	return def
 }

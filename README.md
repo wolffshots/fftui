@@ -80,6 +80,24 @@ To make a window stick between sessions, set `FF_FROM` / `FF_TO` in `.env` or
 the user config file (`fftui --init-config`); an explicit flag still overrides,
 so `--from=""` clears a configured bound for one run.
 
+### Auto-refresh
+
+By default the data only changes when you ask it to — at startup and on `r`.
+`--refresh-interval` (a Go duration: `30s`, `5m`, `1h`; minimum `30s`)
+re-fetches automatically on that interval instead, so a session left open on a
+shelf monitor stays current. The armed interval is shown next to the tab bar
+and `R` pauses/resumes it for the session.
+
+```sh
+go run . --refresh-interval 5m     # re-fetch every five minutes
+FF_REFRESH_INTERVAL=10m go run .   # or seed it from env/config
+```
+
+A background refresh is quiet: no loading screen, and if it fails the last
+good data stays on screen with a `⚠ refresh failed` marker on the tab bar
+(`r` retries). With `--web --headless` the server re-fetches on the same
+interval.
+
 ### Credentials
 
 The app reads a **`.env`** file (in the working directory or next to the binary)
@@ -140,6 +158,7 @@ FF_PASSWORD_CMD=op read op://Personal/FutureForex/password
 | `FF_BASE_URL` | — | override the data API host |
 | `FF_AUTH_URL` | — | override the login host (CSRF + login) |
 | `FF_FROM` / `FF_TO` | — | date window (YYYY-MM-DD): only show cycles overlapping `[from, to]`; also `--from` / `--to` |
+| `FF_REFRESH_INTERVAL` | `0` | auto-refresh interval (Go duration: `30s`, `5m`); `0` = manual refresh only; also `--refresh-interval` |
 | `FF_IDLE_RATE` | `6` | idle-cash rate (% p.a.); also `--idle-rate` |
 | `FF_TAX_RATE` | `41` | marginal tax rate (%) on returns; also `--tax-rate` |
 | `FF_SDA_LIMIT` | `2000000` | annual Single Discretionary Allowance in rand; also `--sda-limit` |
@@ -197,13 +216,15 @@ Login (and any OTP prompt) still happens on the terminal at startup, so if
 your account uses OTP, run fftui once interactively first to seed the cached
 login token, then start the headless server (or set `FF_TOKEN`). An initial
 refresh is attempted at startup; if it fails, the server starts anyway and
-every page offers a retry.
+every page offers a retry. Add `--refresh-interval 10m` to keep the served
+data current without anyone pressing refresh.
 
 ## Views
 
 `1` Cycles table · `2` Analytics · `3` Detail · `4` Charts · `5` Live ·
 `6` Returns. `?` toggles full help; `w` edits the date window (from any view);
-`r` refreshes; `q` quits.
+`r` refreshes; `R` pauses/resumes auto-refresh (`--refresh-interval`);
+`q` quits.
 
 - **Table** — all cycles; `s`/`S` sort, `/` filter, `enter` opens detail. The
   `Spread%` column is the effective spread the cycle caught (gross earnings

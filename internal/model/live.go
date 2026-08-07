@@ -50,6 +50,13 @@ type LiveSource struct {
 	// Only wire this to an interactive prompt before the alt-screen UI starts —
 	// it reads from the terminal.
 	OTPFunc func(detail string, channels []string) (string, error)
+
+	// otpErr latches "login needs an OTP nobody can enter" (OTPFunc is nil once
+	// the UI is running, and the token expires ~hourly). Every login POST makes
+	// the server text the user a fresh code, so unattended retries — auto-
+	// refresh ticks, r — must fail fast here instead of re-attempting; only a
+	// restart re-wires the prompt.
+	otpErr error
 }
 
 // otpChallenge describes an OTP the login endpoint is waiting for.
@@ -102,6 +109,9 @@ func (s *LiveSource) Logout() { clearToken(tokenCacheFile(s.Username)) }
 func (s *LiveSource) ensureToken(ctx context.Context) error {
 	if s.Token != "" {
 		return nil
+	}
+	if s.otpErr != nil {
+		return s.otpErr // don't re-attempt the login: every POST texts another code
 	}
 	if s.Username == "" || s.Password == "" {
 		return fmt.Errorf("no FF_TOKEN set and no FF_USERNAME/PASSWORD to mint one")
@@ -179,7 +189,8 @@ func (s *LiveSource) login(ctx context.Context, client *http.Client, csrf string
 
 	if s.OTPFunc == nil {
 		ch := strings.Join(otp.channels, "/")
-		return "", fmt.Errorf("login requires an OTP (%s): %s — run fftui in an interactive terminal to enter it", ch, otp.detail)
+		s.otpErr = fmt.Errorf("login requires an OTP (%s): %s — restart fftui to enter it on the terminal", ch, otp.detail)
+		return "", s.otpErr
 	}
 	code, err := s.OTPFunc(otp.detail, otp.channels)
 	if err != nil {

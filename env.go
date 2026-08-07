@@ -146,6 +146,11 @@ const configTemplate = `# fftui user config. KEY=VALUE, read literally (no $ exp
 # FF_FROM=
 # FF_TO=
 
+# Auto-refresh: re-fetch on this interval (Go duration, e.g. 30s, 5m, 1h);
+# empty or 0 disables it. Minimum 30s; R pauses/resumes it in the TUI.
+# (--refresh-interval flag overrides.)
+# FF_REFRESH_INTERVAL=
+
 # Optional host overrides (data + auth API hosts) — usually unnecessary:
 # FF_BASE_URL=
 # FF_AUTH_URL=
