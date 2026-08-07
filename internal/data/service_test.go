@@ -4,6 +4,7 @@ import (
 	"context"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/wolffshots/fftui/internal/model"
 )
@@ -38,6 +39,52 @@ func TestServiceLifecycle(t *testing.T) {
 	}
 	if got != snap {
 		t.Fatalf("Latest = %p, want the snapshot Refresh returned (%p)", got, snap)
+	}
+}
+
+// TestServiceDateRange: SetDateRange trims snapshots to cycles overlapping the
+// window — a cycle straddling a bound stays in — and zero bounds are open.
+func TestServiceDateRange(t *testing.T) {
+	day := func(s string) time.Time {
+		d, err := time.Parse("2006-01-02", s)
+		if err != nil {
+			t.Fatalf("bad date %q: %v", s, err)
+		}
+		return d
+	}
+	cases := []struct {
+		name     string
+		from, to string
+		want     int
+	}{
+		{"no window", "", "", 43},
+		{"both bounds", "2026-01-01", "2026-06-30", 12},
+		{"open to", "2026-01-01", "", 14},
+		{"open from", "", "2025-12-31", 29},
+		// FX0004 runs 2024-10-29 → 2024-10-31: still in when the window starts
+		// on its last day, out one day later.
+		{"straddles from", "2024-10-31", "", 40},
+		{"past straddle", "2024-11-01", "", 39},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			svc := testService()
+			var from, to time.Time
+			if tc.from != "" {
+				from = day(tc.from)
+			}
+			if tc.to != "" {
+				to = day(tc.to)
+			}
+			svc.SetDateRange(from, to)
+			snap, err := svc.Refresh(context.Background())
+			if err != nil {
+				t.Fatalf("Refresh: %v", err)
+			}
+			if len(snap.Cycles) != tc.want {
+				t.Fatalf("got %d cycles, want %d", len(snap.Cycles), tc.want)
+			}
+		})
 	}
 }
 

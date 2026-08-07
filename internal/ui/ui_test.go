@@ -96,6 +96,19 @@ func TestEscClearsAppliedFilter(t *testing.T) {
 	}
 }
 
+// TestDateWindowIndicator: an active --from/--to window is flagged on the tab
+// bar (every view is filtered, so the marker is global); no window, no marker.
+func TestDateWindowIndicator(t *testing.T) {
+	m := testModel(t)
+	if strings.Contains(m.View(), "window") {
+		t.Fatal("tab bar shows a window marker with no date range set")
+	}
+	m.svc.SetDateRange(time.Date(2026, 3, 1, 0, 0, 0, 0, time.UTC), time.Time{})
+	if out := m.View(); !strings.Contains(out, "window 2026-03-01 → …") {
+		t.Fatalf("tab bar missing window marker:\n%s", out)
+	}
+}
+
 // TestEnterOpensDetail selects a row and opens the detail view.
 func TestEnterOpensDetail(t *testing.T) {
 	m := testModel(t)

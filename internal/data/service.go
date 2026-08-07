@@ -47,6 +47,8 @@ type Service struct {
 	src model.CycleSource
 	now func() time.Time // Snapshot.Now source; Today unless overridden
 
+	from, to time.Time // optional date window on snapshots; zero bounds are open
+
 	fetchMu sync.Mutex // serialises whole fetches against src
 
 	mu   sync.RWMutex // guards snap/err publication
@@ -66,6 +68,19 @@ func (s *Service) SetNow(now func() time.Time) {
 	s.now = now
 }
 
+// SetDateRange restricts every snapshot to cycles overlapping [from, to]; a
+// zero bound is open-ended. Call before any Refresh (like SetNow); not safe
+// concurrently with one.
+func (s *Service) SetDateRange(from, to time.Time) {
+	s.from, s.to = from, to
+}
+
+// DateRange reports the window set by SetDateRange (zero bounds are open), so
+// front ends can show that a date filter is active.
+func (s *Service) DateRange() (from, to time.Time) {
+	return s.from, s.to
+}
+
 // Refresh runs a full fetch: the cycle history, then (for the live source) the
 // best-effort extras — current-cycle status and market spread. If the extras
 // fail, the cycles still load and those fields just stay nil rather than
@@ -83,7 +98,7 @@ func (s *Service) Refresh(ctx context.Context) (*Snapshot, error) {
 		s.mu.Unlock()
 		return nil, err
 	}
-	snap := &Snapshot{Cycles: cs, Now: s.now()}
+	snap := &Snapshot{Cycles: filterDateRange(cs, s.from, s.to), Now: s.now()}
 	if ff, ok := s.src.(*model.LiveSource); ok {
 		if st, err := ff.FetchClient(ctx); err == nil {
 			snap.Client = st
@@ -101,6 +116,26 @@ func (s *Service) Refresh(ctx context.Context) (*Snapshot, error) {
 	s.snap, s.err = snap, nil
 	s.mu.Unlock()
 	return snap, nil
+}
+
+// filterDateRange keeps cycles whose [StartDate, EndDate] span overlaps the
+// window — a cycle straddling a bound stays in. Zero bounds are open-ended;
+// order is preserved.
+func filterDateRange(cs []model.Cycle, from, to time.Time) []model.Cycle {
+	if from.IsZero() && to.IsZero() {
+		return cs
+	}
+	out := make([]model.Cycle, 0, len(cs))
+	for _, c := range cs {
+		if !from.IsZero() && c.EndDate.Before(from) {
+			continue
+		}
+		if !to.IsZero() && c.StartDate.After(to) {
+			continue
+		}
+		out = append(out, c)
+	}
+	return out
 }
 
 // Latest returns the most recent snapshot and the error from the most recent

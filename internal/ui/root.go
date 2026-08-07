@@ -331,7 +331,24 @@ func (m RootModel) renderTabs() string {
 		}
 	}
 	bar := lipgloss.JoinHorizontal(lipgloss.Top, tabs...)
+	// Every view shows only cycles inside the --from/--to window, so flag it
+	// globally rather than per view.
+	if from, to := m.svc.DateRange(); !from.IsZero() || !to.IsZero() {
+		bar += dimStyle.Render("  window ") + valueStyle.Render(rangeLabel(from, to))
+	}
 	return tabBarStyle.Render(bar)
+}
+
+// rangeLabel formats the active date window, e.g. "2026-03-01 → …".
+func rangeLabel(from, to time.Time) string {
+	f, t := "…", "…"
+	if !from.IsZero() {
+		f = from.Format("2006-01-02")
+	}
+	if !to.IsZero() {
+		t = to.Format("2006-01-02")
+	}
+	return f + " → " + t
 }
 
 func (m RootModel) renderHelp() string {
