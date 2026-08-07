@@ -25,9 +25,10 @@ const (
 	viewDetail
 	viewCharts
 	viewLive
+	viewReturns
 )
 
-var tabNames = []string{"Cycles", "Analytics", "Detail", "Charts", "Live"}
+var tabNames = []string{"Cycles", "Analytics", "Detail", "Charts", "Live", "Returns"}
 
 // Messages emitted by the async fetch command. cyclesLoadedMsg carries the cycle
 // history plus the live-only extras (nil in CSV mode or if their pull failed).
@@ -75,6 +76,7 @@ type RootModel struct {
 	detail    detailModel
 	charts    chartsModel
 	live      liveModel
+	returns   returnsModel
 
 	// Live snapshot, also used by the status-bar strip. Nil in CSV mode.
 	client *model.ClientStatus
@@ -113,6 +115,7 @@ func New(svc *data.Service, now time.Time, rates analytics.Rates, allow analytic
 		detail:      newDetailModel(fees),
 		charts:      newChartsModel(now, rates),
 		live:        newLiveModel(),
+		returns:     newReturnsModel(now, fees),
 	}
 }
 
@@ -181,6 +184,7 @@ func (m RootModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.now = msg.now
 			m.analytics.now = msg.now
 			m.charts.now = msg.now
+			m.returns.now = msg.now
 		}
 		cs := msg.cycles
 		m.client = msg.client
@@ -191,6 +195,8 @@ func (m RootModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.analytics.setCycles(cs)
 		m.charts.setCycles(cs)
 		m.live.setData(msg.client, msg.market)
+		m.returns.setCycles(cs)
+		m.returns.setData(msg.client, msg.market)
 		m.applySizes()
 		return m, nil
 
@@ -292,6 +298,9 @@ func (m RootModel) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	case keyMatches(msg, m.keys.Live):
 		m.active = viewLive
 		return m, nil
+	case keyMatches(msg, m.keys.Returns):
+		m.active = viewReturns
+		return m, nil
 
 	case keyMatches(msg, m.keys.Back) && m.active == viewDetail:
 		m.active = viewTable
@@ -326,6 +335,10 @@ func (m RootModel) forward(msg tea.Msg) (tea.Model, tea.Cmd) {
 		var cmd tea.Cmd
 		m.live, cmd = m.live.update(msg)
 		return m, cmd
+	case viewReturns:
+		var cmd tea.Cmd
+		m.returns, cmd = m.returns.update(msg)
+		return m, cmd
 	}
 	return m, nil
 }
@@ -350,6 +363,7 @@ func (m *RootModel) applySizes() {
 	m.detail.setSize(m.width, bodyH)
 	m.charts.setSize(m.width, bodyH)
 	m.live.setSize(m.width, bodyH)
+	m.returns.setSize(m.width, bodyH)
 }
 
 // renderStatusBar renders the live header strip (empty in CSV mode).
@@ -386,6 +400,8 @@ func (m RootModel) View() string {
 			body = m.charts.view()
 		case viewLive:
 			body = m.live.view()
+		case viewReturns:
+			body = m.returns.view()
 		}
 	}
 

@@ -57,11 +57,58 @@ func (f Fees) TierRate(capital float64) float64 {
 	return rate
 }
 
+// Projection is the modelled waterfall for one cycle at a given capital and
+// gross-earnings spread — the same lines, in the same order, as the statement.
+type Projection struct {
+	Capital       float64
+	Spread        float64 // gross-earnings spread, as a fraction of capital
+	GrossEarnings float64 // capital × spread
+	VariableFee   float64 // Variable × capital (bank exchange + offshore fees)
+	FixedFee      float64 // Fixed (bank admin + instant EFT)
+	GrossProfit   float64 // gross earnings − third-party fees
+	TierRate      float64 // FF's share of gross profit at this capital
+	SuccessFee    float64 // TierRate × gross profit
+	NetProfit     float64 // gross profit − success fee
+	NetReturn     float64 // NetProfit / Capital
+}
+
+// Project models the waterfall at `capital` for a gross-earnings `spread` (a
+// fraction of capital). FF's success fee is a share of GROSS PROFIT — what is
+// left after the third-party fees — and a losing cycle pays no success fee.
+func (f Fees) Project(spread, capital float64) Projection {
+	p := Projection{
+		Capital:       capital,
+		Spread:        spread,
+		GrossEarnings: spread * capital,
+		VariableFee:   f.Variable * capital,
+		FixedFee:      f.Fixed,
+		TierRate:      f.TierRate(capital),
+	}
+	p.GrossProfit = p.GrossEarnings - p.VariableFee - p.FixedFee
+	if p.GrossProfit > 0 {
+		p.SuccessFee = p.GrossProfit * p.TierRate
+	}
+	p.NetProfit = p.GrossProfit - p.SuccessFee
+	if capital > 0 {
+		p.NetReturn = p.NetProfit / capital
+	}
+	return p
+}
+
 // Net projects the per-cycle net profit at `capital` given a gross-earnings
 // market spread (a fraction of capital).
 func (f Fees) Net(spread, capital float64) float64 {
-	grossProfit := (spread-f.Variable)*capital - f.Fixed
-	return grossProfit * (1 - f.TierRate(capital))
+	return f.Project(spread, capital).NetProfit
+}
+
+// BreakEven is the cycle capital at which gross profit reaches zero for a
+// spread: below it the fees are more than the spread earns. The second result
+// is false when no capital breaks even (the variable fee alone eats the spread).
+func (f Fees) BreakEven(spread float64) (float64, bool) {
+	if spread <= f.Variable {
+		return 0, false
+	}
+	return f.Fixed / (spread - f.Variable), true
 }
 
 // Spread inverts Net: the gross-earnings spread implied by an observed net
@@ -76,8 +123,11 @@ func (f Fees) Spread(net, capital float64) float64 {
 
 // GrossProfit inverts the success fee only: the gross profit (the statement
 // line after third-party fees, before FF's share) implied by an observed net
-// profit at a known capital.
+// profit at a known capital. A loss pays no success fee, so gross equals net.
 func (f Fees) GrossProfit(net, capital float64) float64 {
+	if net <= 0 {
+		return net
+	}
 	return net / (1 - f.TierRate(capital))
 }
 

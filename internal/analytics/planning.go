@@ -75,6 +75,25 @@ type Planning struct {
 	Extra100kNet   float64 // after tax
 }
 
+// AvgSpread backs the gross-earnings market spread out of every cycle that
+// started in the trailing 365 days and averages it, with the cycle count. It is
+// the CSV-mode stand-in for the live market spread.
+func AvgSpread(cs []model.Cycle, now time.Time, fees Fees) (float64, int) {
+	cutoff := now.AddDate(0, 0, -365)
+	var sum float64
+	var n int
+	for _, c := range cs {
+		if c.StartDate.After(cutoff) && !c.StartDate.After(now) {
+			sum += fees.Spread(c.NetProfit, c.ZarIn)
+			n++
+		}
+	}
+	if n == 0 {
+		return 0, 0
+	}
+	return sum / float64(n), n
+}
+
 // Plan computes the planning figures as of `now`. A zero-total Allowances
 // disables the runway and sweet-spot figures (they stay zero).
 func Plan(cs []model.Cycle, now time.Time, r Rates, a Allowances, fees Fees) Planning {
@@ -91,13 +110,12 @@ func Plan(cs []model.Cycle, now time.Time, r Rates, a Allowances, fees Fees) Pla
 
 	// Trailing-365-day cadence and return, and the latest cycle's capital.
 	cutoff := now.AddDate(0, 0, -365)
-	var retSum, spreadSum float64
+	var retSum float64
 	var latest time.Time
 	for _, c := range cs {
 		if c.StartDate.After(cutoff) && !c.StartDate.After(now) {
 			p.CyclesPerYear++
 			retSum += c.Return()
-			spreadSum += fees.Spread(c.NetProfit, c.ZarIn)
 		}
 		if !c.StartDate.Before(latest) {
 			latest = c.StartDate
@@ -106,8 +124,8 @@ func Plan(cs []model.Cycle, now time.Time, r Rates, a Allowances, fees Fees) Pla
 	}
 	if p.CyclesPerYear > 0 {
 		p.AvgReturn = retSum / float64(p.CyclesPerYear)
-		p.AvgSpread = spreadSum / float64(p.CyclesPerYear)
 	}
+	p.AvgSpread, _ = AvgSpread(cs, now, fees)
 
 	if p.TotalLimit > 0 {
 		year := now.Year()

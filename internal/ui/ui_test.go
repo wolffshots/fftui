@@ -42,7 +42,7 @@ func rune1(r rune) tea.KeyMsg { return tea.KeyMsg{Type: tea.KeyRunes, Runes: []r
 // without panicking.
 func TestAllViewsRender(t *testing.T) {
 	m := testModel(t)
-	for _, k := range []rune{'1', '2', '3', '4', '5'} {
+	for _, k := range []rune{'1', '2', '3', '4', '5', '6'} {
 		m = send(m, rune1(k))
 		out := m.View()
 		if strings.TrimSpace(out) == "" {
@@ -347,6 +347,46 @@ func TestLiveViewRendersData(t *testing.T) {
 	}
 }
 
+// TestReturnsView projects the ladder at a known spread and checks the row for
+// R200,000 against the fee waterfall computed by hand: gross earnings R1,600.00,
+// third-party R460.00 + R530.00, gross profit R610.00, FF 30% = R183.00, net
+// R427.00 (0.21%/cycle).
+func TestReturnsView(t *testing.T) {
+	m := testModel(t)
+	market := &model.MarketConditions{Current: model.MarketPoint{Spread: 0.80}, Period: 7}
+	mm, _ := m.Update(cyclesLoadedMsg{cycles: m.table.all, market: market})
+	m = send(mm.(RootModel), tea.WindowSizeMsg{Width: 130, Height: 60})
+	m = send(m, rune1('6'))
+
+	out := m.returns.render()
+	for _, want := range []string{
+		"0.80%",           // the projected spread, from the live feed
+		"R1,600.00",       // gross earnings at R200k
+		"-R990.00",        // third-party: 0.23% × R200k + R530
+		"R610.00",         // gross profit
+		"-R183.00",        // FF success fee, 30% of gross profit
+		"R427.00",         // net profit
+		"R92,982.46",      // break-even capital at this spread
+		"instant EFT",     // the fixed-fee constituent parts
+		"GROSS PROFIT",    // what FF's share is a cut of
+		"up to R150k 35%", // the success-fee ladder
+	} {
+		if !strings.Contains(out, want) {
+			t.Errorf("returns view missing %q", want)
+		}
+	}
+}
+
+// TestReturnsViewCSVFallback: with no live feed the view projects the trailing
+// average spread backed out of the cycles instead of going blank.
+func TestReturnsViewCSVFallback(t *testing.T) {
+	m := testModel(t) // no client/market — CSV mode
+	out := m.returns.render()
+	if !strings.Contains(out, "no live feed in CSV mode") {
+		t.Errorf("expected the CSV-mode spread source, got:\n%s", out)
+	}
+}
+
 // TestStatusBarSingleLine checks the live strip clips to one row on a narrow
 // terminal instead of wrapping and stealing a body line.
 func TestStatusBarSingleLine(t *testing.T) {
@@ -415,7 +455,7 @@ func TestResizeNoPanic(t *testing.T) {
 	m := testModel(t)
 	for _, sz := range [][2]int{{40, 10}, {200, 60}, {10, 5}, {80, 24}} {
 		m = send(m, tea.WindowSizeMsg{Width: sz[0], Height: sz[1]})
-		for _, k := range []rune{'1', '2', '3', '4', '5'} {
+		for _, k := range []rune{'1', '2', '3', '4', '5', '6'} {
 			m = send(m, rune1(k))
 			_ = m.View()
 		}

@@ -201,8 +201,9 @@ every page offers a retry.
 
 ## Views
 
-`1` Cycles table · `2` Analytics · `3` Detail · `4` Charts. `?` toggles full
-help; `w` edits the date window (from any view); `r` refreshes; `q` quits.
+`1` Cycles table · `2` Analytics · `3` Detail · `4` Charts · `5` Live ·
+`6` Returns. `?` toggles full help; `w` edits the date window (from any view);
+`r` refreshes; `q` quits.
 
 - **Table** — all cycles; `s`/`S` sort, `/` filter, `enter` opens detail. The
   `Spread%` column is the effective spread the cycle caught (gross earnings
@@ -221,6 +222,15 @@ help; `w` edits the date window (from any view); `r` refreshes; `q` quits.
   headline rate.
 - **Charts** — braille/block sparklines for per-cycle return, monthly annualised
   rate, and cumulative profit.
+- **Live** — the in-progress cycle's status, the live market spread with a
+  history sparkline, and your funds and SDA/FIA balances (live source only).
+- **Returns** — what a cycle earns at each capital size for the *current*
+  spread, run through the fee waterfall below: gross earnings, third-party
+  fees, gross profit, FF's tier share, net profit, net return, and the share of
+  the spread you keep. The row for your current capital is marked. Below the
+  ladder every constituent part of the fee figures is spelled out in statement
+  order, with the break-even capital for that spread. The spread comes from the
+  live market feed, or in CSV mode from the trailing year of your own cycles.
 
 ## Methodology
 
@@ -374,8 +384,16 @@ gross earnings  = capital × market spread        # from live trade rates
 = net profit
 ```
 
+FF's share is a cut of **gross profit** — what is left after the third-party
+fees — never of the earnings or the capital, and a losing cycle pays no success
+fee. The waterfall was checked against four real cycle statements and matched
+them to the cent; across them the variable third-party fees ran 0.228%–0.235%
+of capital, so a modelled net profit is good to about ±1%. The regression tests
+use synthetic cycles in those bands.
+
 Because the fixed fees dilute and the FF tier falls as cycle capital grows,
-the net return per cycle **improves with size**. The planning strip backs the
+the net return per cycle **improves with size**. The Returns view projects the
+whole ladder at the current spread. The planning strip backs the
 average market spread out of the trailing cycles through this waterfall, then
 projects net returns at other capital sizes: the `fee ladder` line shows your
 current tier vs the top tier and the modelled net-return-per-cycle at each,
@@ -414,7 +432,7 @@ internal/model/              Cycle, CSVSource, live API source (+ auth)
 internal/analytics/          bucketing, annualisation, variance (+ regression tests)
 internal/data/               Service: fetch/cache seam shared by both front ends
 internal/format/             pure text formatters (money/percent/sparklines)
-internal/ui/                 root model, table/analytics/detail/charts views
+internal/ui/                 root model, table/analytics/detail/charts/live/returns views
 internal/webui/              the browser front end (--web): handlers + templates
 testdata/cycles.csv          reference export used by tests
 ```
