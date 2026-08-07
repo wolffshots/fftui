@@ -172,9 +172,10 @@ FF_PASSWORD_CMD=op read op://Personal/FutureForex/password
 
 ## Web UI
 
-The same views are available in a browser: `--web` serves them alongside the
-TUI (the URL is printed before the TUI starts), and `--web --headless` serves
-them without the TUI — for leaving fftui running on a home server.
+The cycles, analytics, detail, charts and live views are available in a browser
+(Returns is TUI-only for now): `--web` serves them alongside the TUI (the URL
+is printed before the TUI starts), and `--web --headless` serves them without
+the TUI — for leaving fftui running on a home server.
 
 ```sh
 # Alongside the TUI:
