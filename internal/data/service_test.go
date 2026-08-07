@@ -4,6 +4,7 @@ import (
 	"context"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/wolffshots/fftui/internal/model"
 )
@@ -38,6 +39,89 @@ func TestServiceLifecycle(t *testing.T) {
 	}
 	if got != snap {
 		t.Fatalf("Latest = %p, want the snapshot Refresh returned (%p)", got, snap)
+	}
+}
+
+// TestServiceDateRange: SetDateRange trims snapshots to cycles overlapping the
+// window — a cycle straddling a bound stays in — and zero bounds are open.
+func TestServiceDateRange(t *testing.T) {
+	day := func(s string) time.Time {
+		d, err := time.Parse("2006-01-02", s)
+		if err != nil {
+			t.Fatalf("bad date %q: %v", s, err)
+		}
+		return d
+	}
+	cases := []struct {
+		name     string
+		from, to string
+		want     int
+	}{
+		{"no window", "", "", 43},
+		{"both bounds", "2026-01-01", "2026-06-30", 12},
+		{"open to", "2026-01-01", "", 14},
+		{"open from", "", "2025-12-31", 29},
+		// FX0004 runs 2024-10-29 → 2024-10-31: still in when the window starts
+		// on its last day, out one day later.
+		{"straddles from", "2024-10-31", "", 40},
+		{"past straddle", "2024-11-01", "", 39},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			svc := testService()
+			var from, to time.Time
+			if tc.from != "" {
+				from = day(tc.from)
+			}
+			if tc.to != "" {
+				to = day(tc.to)
+			}
+			svc.SetDateRange(from, to)
+			snap, err := svc.Refresh(context.Background())
+			if err != nil {
+				t.Fatalf("Refresh: %v", err)
+			}
+			if len(snap.Cycles) != tc.want {
+				t.Fatalf("got %d cycles, want %d", len(snap.Cycles), tc.want)
+			}
+		})
+	}
+}
+
+// countingSource counts Fetch calls so tests can assert a window change costs
+// no source round trip.
+type countingSource struct {
+	inner model.CycleSource
+	n     int
+}
+
+func (c *countingSource) Fetch(ctx context.Context) ([]model.Cycle, error) {
+	c.n++
+	return c.inner.Fetch(ctx)
+}
+
+// TestServiceSetDateRangeRepublishes: changing the window after a refresh
+// re-filters the cached fetch and publishes it immediately — no refetch —
+// and clearing it restores the full set.
+func TestServiceSetDateRangeRepublishes(t *testing.T) {
+	src := &countingSource{inner: model.NewCSVSource("../../testdata/cycles.csv")}
+	svc := NewService(src)
+	if _, err := svc.Refresh(context.Background()); err != nil {
+		t.Fatalf("Refresh: %v", err)
+	}
+
+	svc.SetDateRange(time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC), time.Time{})
+	if snap, _ := svc.Latest(); len(snap.Cycles) != 14 {
+		t.Fatalf("windowed Latest has %d cycles, want 14", len(snap.Cycles))
+	}
+
+	svc.SetDateRange(time.Time{}, time.Time{})
+	if snap, _ := svc.Latest(); len(snap.Cycles) != 43 {
+		t.Fatalf("cleared Latest has %d cycles, want 43", len(snap.Cycles))
+	}
+
+	if src.n != 1 {
+		t.Fatalf("window changes hit the source: %d fetches, want 1", src.n)
 	}
 }
 

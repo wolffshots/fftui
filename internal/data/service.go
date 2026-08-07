@@ -49,9 +49,11 @@ type Service struct {
 
 	fetchMu sync.Mutex // serialises whole fetches against src
 
-	mu   sync.RWMutex // guards snap/err publication
-	snap *Snapshot
-	err  error
+	mu       sync.RWMutex // guards everything below
+	from, to time.Time    // optional date window on snapshots; zero bounds are open
+	raw      *Snapshot    // unfiltered result of the last successful fetch
+	snap     *Snapshot    // published view: raw trimmed to the date window
+	err      error
 }
 
 // NewService wraps src in a Service.
@@ -64,6 +66,27 @@ func NewService(src model.CycleSource) *Service {
 // deterministic. Call before any Refresh; not safe concurrently with one.
 func (s *Service) SetNow(now func() time.Time) {
 	s.now = now
+}
+
+// SetDateRange restricts every snapshot to cycles overlapping [from, to]; a
+// zero bound is open-ended. Safe to call at any time: the current fetch (if
+// any) is re-published under the new window without touching the source, so
+// interactive changes are instant and cost no API call.
+func (s *Service) SetDateRange(from, to time.Time) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.from, s.to = from, to
+	if s.raw != nil {
+		s.snap = windowed(s.raw, from, to)
+	}
+}
+
+// DateRange reports the window set by SetDateRange (zero bounds are open), so
+// front ends can show that a date filter is active.
+func (s *Service) DateRange() (from, to time.Time) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	return s.from, s.to
 }
 
 // Refresh runs a full fetch: the cycle history, then (for the live source) the
@@ -83,24 +106,57 @@ func (s *Service) Refresh(ctx context.Context) (*Snapshot, error) {
 		s.mu.Unlock()
 		return nil, err
 	}
-	snap := &Snapshot{Cycles: cs, Now: s.now()}
+	raw := &Snapshot{Cycles: cs, Now: s.now()}
 	if ff, ok := s.src.(*model.LiveSource); ok {
 		if st, err := ff.FetchClient(ctx); err == nil {
-			snap.Client = st
+			raw.Client = st
 		}
 		if mc, err := ff.FetchMarketConditions(ctx, liveSpreadPeriod); err == nil {
-			snap.Market = mc
+			raw.Market = mc
 		}
 		if mc, err := ff.FetchMarketConditions(ctx, trendSpreadPeriod); err == nil {
-			snap.MarketYear = mc
+			raw.MarketYear = mc
 		}
 	}
-	snap.FetchedAt = time.Now()
+	raw.FetchedAt = time.Now()
 
 	s.mu.Lock()
+	s.raw = raw
+	snap := windowed(raw, s.from, s.to)
 	s.snap, s.err = snap, nil
 	s.mu.Unlock()
 	return snap, nil
+}
+
+// windowed is raw trimmed to the date window — the same snapshot when the
+// window is unset, a shallow copy with filtered cycles otherwise.
+func windowed(raw *Snapshot, from, to time.Time) *Snapshot {
+	if from.IsZero() && to.IsZero() {
+		return raw
+	}
+	snap := *raw
+	snap.Cycles = filterDateRange(raw.Cycles, from, to)
+	return &snap
+}
+
+// filterDateRange keeps cycles whose [StartDate, EndDate] span overlaps the
+// window — a cycle straddling a bound stays in. Zero bounds are open-ended;
+// order is preserved.
+func filterDateRange(cs []model.Cycle, from, to time.Time) []model.Cycle {
+	if from.IsZero() && to.IsZero() {
+		return cs
+	}
+	out := make([]model.Cycle, 0, len(cs))
+	for _, c := range cs {
+		if !from.IsZero() && c.EndDate.Before(from) {
+			continue
+		}
+		if !to.IsZero() && c.StartDate.After(to) {
+			continue
+		}
+		out = append(out, c)
+	}
+	return out
 }
 
 // Latest returns the most recent snapshot and the error from the most recent

@@ -60,6 +60,26 @@ go run .
 
 Build a binary with `go build -o fftui .`.
 
+### Date window
+
+`--from` / `--to` (YYYY-MM-DD) restrict **every** view — table, analytics,
+charts, and the web UI — to cycles whose start–end span overlaps the window
+(a cycle straddling a bound stays in). Either side may be omitted for an open
+bound; the active window is shown next to the tab bar.
+
+```sh
+go run . --from 2026-03-01                  # this SA tax year onward
+go run . --from 2026-01-01 --to 2026-06-30  # H1 2026 only
+```
+
+Inside the TUI, `w` opens a window editor (`from..to`, either side optional,
+empty shows all) that re-cuts the already-loaded data instantly — no refetch.
+Flags/config seed the initial window; `w` adjusts it for the session.
+
+To make a window stick between sessions, set `FF_FROM` / `FF_TO` in `.env` or
+the user config file (`fftui --init-config`); an explicit flag still overrides,
+so `--from=""` clears a configured bound for one run.
+
 ### Credentials
 
 The app reads a **`.env`** file (in the working directory or next to the binary)
@@ -119,6 +139,7 @@ FF_PASSWORD_CMD=op read op://Personal/FutureForex/password
 | `FF_CLIENT_ID` | auto | client id; auto-detected from the account after login — set to override |
 | `FF_BASE_URL` | — | override the data API host |
 | `FF_AUTH_URL` | — | override the login host (CSRF + login) |
+| `FF_FROM` / `FF_TO` | — | date window (YYYY-MM-DD): only show cycles overlapping `[from, to]`; also `--from` / `--to` |
 | `FF_IDLE_RATE` | `6` | idle-cash rate (% p.a.); also `--idle-rate` |
 | `FF_TAX_RATE` | `41` | marginal tax rate (%) on returns; also `--tax-rate` |
 | `FF_SDA_LIMIT` | `2000000` | annual Single Discretionary Allowance in rand; also `--sda-limit` |
@@ -181,7 +202,7 @@ every page offers a retry.
 ## Views
 
 `1` Cycles table · `2` Analytics · `3` Detail · `4` Charts. `?` toggles full
-help; `r` refreshes; `q` quits.
+help; `w` edits the date window (from any view); `r` refreshes; `q` quits.
 
 - **Table** — all cycles; `s`/`S` sort, `/` filter, `enter` opens detail. The
   `Spread%` column is the effective spread the cycle caught (gross earnings

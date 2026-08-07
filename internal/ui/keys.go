@@ -19,6 +19,7 @@ type keyMap struct {
 	SortCol    key.Binding
 	SortDir    key.Binding
 	Filter     key.Binding
+	DateWindow key.Binding
 	Enter      key.Binding
 
 	Refresh key.Binding
@@ -41,6 +42,7 @@ func newKeyMap() keyMap {
 		SortCol:    key.NewBinding(key.WithKeys("s"), key.WithHelp("s", "sort col")),
 		SortDir:    key.NewBinding(key.WithKeys("S"), key.WithHelp("S", "sort dir")),
 		Filter:     key.NewBinding(key.WithKeys("/"), key.WithHelp("/", "filter")),
+		DateWindow: key.NewBinding(key.WithKeys("w"), key.WithHelp("w", "date window")),
 		Enter:      key.NewBinding(key.WithKeys("enter"), key.WithHelp("enter", "detail")),
 		Refresh:    key.NewBinding(key.WithKeys("r"), key.WithHelp("r", "refresh")),
 		Help:       key.NewBinding(key.WithKeys("?"), key.WithHelp("?", "help")),
@@ -51,13 +53,13 @@ func newKeyMap() keyMap {
 
 // ShortHelp / FullHelp implement bubbles/help.KeyMap.
 func (k keyMap) ShortHelp() []key.Binding {
-	return []key.Binding{k.Table, k.Analytics, k.Charts, k.Live, k.Filter, k.Refresh, k.Help, k.Quit}
+	return []key.Binding{k.Table, k.Analytics, k.Charts, k.Live, k.Filter, k.DateWindow, k.Refresh, k.Help, k.Quit}
 }
 
 func (k keyMap) FullHelp() [][]key.Binding {
 	return [][]key.Binding{
 		{k.Table, k.Analytics, k.Detail, k.Charts, k.Live},
-		{k.Up, k.Down, k.Enter, k.Filter},
+		{k.Up, k.Down, k.Enter, k.Filter, k.DateWindow},
 		{k.SubTab, k.ToggleDead, k.SortCol, k.SortDir},
 		{k.Refresh, k.Back, k.Help, k.Quit},
 	}

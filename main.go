@@ -41,6 +41,8 @@ func main() {
 	feeFixed := flag.Float64("fee-fixed", envFloat("FF_FEE_FIXED", defFees.Fixed), "fixed third-party fees per cycle in rand (bank admin + EFT)")
 	feeVarPct := flag.Float64("fee-variable", envFloat("FF_FEE_VARIABLE", defFees.Variable*100), "variable third-party fees per cycle as % of capital (exchange + offshore fees)")
 	feeTiers := flag.String("fee-tiers", envStr("FF_FEE_TIERS", ""), `FF success-fee tiers as "capital:percent,..." (e.g. "100000:35,200000:30,400000:25"); empty uses the built-in schedule`)
+	fromStr := flag.String("from", envStr("FF_FROM", ""), "only show cycles active on or after this date (YYYY-MM-DD); empty = no lower bound")
+	toStr := flag.String("to", envStr("FF_TO", ""), "only show cycles active on or before this date (YYYY-MM-DD); empty = no upper bound")
 	web := flag.Bool("web", false, "serve the web UI on --addr alongside the TUI")
 	headless := flag.Bool("headless", false, "with --web: serve the web UI only (no TUI); runs until SIGINT/SIGTERM")
 	addr := flag.String("addr", envStr("FF_WEB_ADDR", "127.0.0.1:8442"), "listen address for the web UI (--web)")
@@ -51,6 +53,22 @@ func main() {
 
 	if *headless && !*web {
 		fmt.Fprintln(os.Stderr, "--headless requires --web")
+		os.Exit(1)
+	}
+
+	// Validate the date window up front so a typo fails before any login/OTP.
+	from, err := parseDate("--from", *fromStr)
+	if err != nil {
+		fmt.Fprintln(os.Stderr, err)
+		os.Exit(1)
+	}
+	to, err := parseDate("--to", *toStr)
+	if err != nil {
+		fmt.Fprintln(os.Stderr, err)
+		os.Exit(1)
+	}
+	if !from.IsZero() && !to.IsZero() && to.Before(from) {
+		fmt.Fprintf(os.Stderr, "--to %s is before --from %s\n", *toStr, *fromStr)
 		os.Exit(1)
 	}
 
@@ -123,6 +141,7 @@ func main() {
 		fees.Tiers = tiers
 	}
 	svc := data.NewService(source)
+	svc.SetDateRange(from, to)
 
 	// Web front end: same service, same figures. Listen before the TUI takes
 	// the terminal so a bad address (port in use) fails loudly up front.
@@ -233,6 +252,19 @@ func promptOTP(detail string, channels []string) (string, error) {
 		return "", err
 	}
 	return strings.TrimSpace(line), nil
+}
+
+// parseDate parses an optional YYYY-MM-DD flag value; empty means unset and
+// returns the zero time (an open bound).
+func parseDate(name, s string) (time.Time, error) {
+	if s == "" {
+		return time.Time{}, nil
+	}
+	t, err := time.Parse("2006-01-02", s)
+	if err != nil {
+		return time.Time{}, fmt.Errorf("bad %s: %q is not a YYYY-MM-DD date", name, s)
+	}
+	return t, nil
 }
 
 // parseFeeTiers parses "capital:percent,..." (e.g. "100000:35,400000:25") into
