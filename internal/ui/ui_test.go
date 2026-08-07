@@ -2,6 +2,7 @@ package ui
 
 import (
 	"context"
+	"errors"
 	"strings"
 	"testing"
 	"time"
@@ -14,7 +15,10 @@ import (
 	"github.com/wolffshots/fftui/internal/model"
 )
 
-func testModel(t *testing.T) RootModel {
+func testModel(t *testing.T) RootModel { return testModelAuto(t, 0) }
+
+// testModelAuto is testModel with an auto-refresh interval configured.
+func testModelAuto(t *testing.T, every time.Duration) RootModel {
 	t.Helper()
 	src := model.NewCSVSource("../../testdata/cycles.csv")
 	cs, err := src.Fetch(context.Background())
@@ -23,7 +27,7 @@ func testModel(t *testing.T) RootModel {
 	}
 	now := time.Date(2026, 7, 10, 0, 0, 0, 0, time.UTC)
 	m := New(data.NewService(src), now, analytics.Rates{Idle: 0.06, Tax: 0.41},
-		analytics.Allowances{SDALimit: 2_000_000, FIALimit: 10_000_000}, analytics.DefaultFees())
+		analytics.Allowances{SDALimit: 2_000_000, FIALimit: 10_000_000}, analytics.DefaultFees(), every)
 	// Simulate the async load + a terminal size.
 	mm, _ := m.Update(cyclesLoadedMsg{cycles: cs})
 	m = mm.(RootModel)
@@ -120,7 +124,7 @@ func TestDateWindowInteractive(t *testing.T) {
 	}
 	now := time.Date(2026, 7, 10, 0, 0, 0, 0, time.UTC)
 	m := New(svc, now, analytics.Rates{Idle: 0.06, Tax: 0.41},
-		analytics.Allowances{SDALimit: 2_000_000, FIALimit: 10_000_000}, analytics.DefaultFees())
+		analytics.Allowances{SDALimit: 2_000_000, FIALimit: 10_000_000}, analytics.DefaultFees(), 0)
 	m = send(m, cyclesLoadedMsg{cycles: snap.Cycles, now: snap.Now})
 	m = send(m, tea.WindowSizeMsg{Width: 120, Height: 40})
 
@@ -419,5 +423,193 @@ func TestResizeNoPanic(t *testing.T) {
 			m = send(m, rune1(k))
 			_ = m.View()
 		}
+	}
+}
+
+// TestAutoRefreshTick: a tick starts a quiet background fetch (no loading
+// screen) and re-arms the next tick; a tick landing while a fetch is already
+// in flight only re-arms.
+func TestAutoRefreshTick(t *testing.T) {
+	m := testModelAuto(t, 30*time.Second)
+	mm, cmd := m.Update(autoRefreshMsg{seq: m.refreshSeq})
+	m = mm.(RootModel)
+	if !m.refreshing || m.loading {
+		t.Fatalf("refreshing=%v loading=%v; want a quiet background fetch", m.refreshing, m.loading)
+	}
+	if cmd == nil {
+		t.Fatal("tick did not re-arm the loop")
+	}
+	mm, cmd = m.Update(autoRefreshMsg{seq: m.refreshSeq})
+	m = mm.(RootModel)
+	if cmd == nil {
+		t.Fatal("tick during an in-flight fetch should still re-arm")
+	}
+}
+
+// TestAutoRefreshToggle: R pauses the loop (a pending tick dies) and resumes
+// it with a fresh chain — the pre-pause tick must die after the resume too, or
+// two chains would tick; without --refresh-interval configured R is a no-op.
+func TestAutoRefreshToggle(t *testing.T) {
+	m := testModelAuto(t, 30*time.Second)
+	if !m.autoRefresh {
+		t.Fatal("auto-refresh should start enabled when an interval is set")
+	}
+	prePause := m.refreshSeq
+	m = send(m, rune1('R'))
+	if m.autoRefresh {
+		t.Fatal("R did not pause auto-refresh")
+	}
+	if _, cmd := m.Update(autoRefreshMsg{seq: m.refreshSeq}); cmd != nil {
+		t.Fatal("tick while paused should let the loop die")
+	}
+	mm, cmd := m.Update(rune1('R'))
+	m = mm.(RootModel)
+	if !m.autoRefresh || cmd == nil {
+		t.Fatalf("resume: autoRefresh=%v cmd=%v; want enabled with a re-armed tick", m.autoRefresh, cmd)
+	}
+	if _, cmd := m.Update(autoRefreshMsg{seq: prePause}); cmd != nil {
+		t.Fatal("pre-pause tick re-armed after the resume; two chains would tick")
+	}
+	if _, cmd := m.Update(autoRefreshMsg{seq: m.refreshSeq}); cmd == nil {
+		t.Fatal("the fresh chain's tick should still re-arm")
+	}
+
+	off := testModel(t)
+	mm, _ = off.Update(rune1('R'))
+	off = mm.(RootModel)
+	if off.autoRefresh || off.refreshing {
+		t.Fatal("R should be a no-op with no interval configured")
+	}
+}
+
+// TestAutoRefreshQuietFailure: a failed background refresh keeps the last good
+// data on screen (the service kept the snapshot) and flags the tab bar instead
+// of switching to the error screen; a manual r clears the marker (its outcome
+// supersedes it), and a fetched load clears it too.
+func TestAutoRefreshQuietFailure(t *testing.T) {
+	m := testModelAuto(t, 30*time.Second)
+	m = send(m, autoRefreshMsg{seq: m.refreshSeq})
+	m = send(m, fetchErrMsg{err: errors.New("boom"), background: true})
+	if m.err != nil {
+		t.Fatalf("background failure set err=%v; the error screen is for manual fetches", m.err)
+	}
+	if m.refreshErr == nil {
+		t.Fatal("background failure not recorded")
+	}
+	if !strings.Contains(m.renderTabs(), "refresh failed") {
+		t.Fatal("tab bar missing the failure marker")
+	}
+	if strings.Contains(m.View(), "fetch failed:") {
+		t.Fatal("error screen shown for a background failure")
+	}
+
+	// r retries: the stale marker must not linger on the loading screen or
+	// double up with the error screen if the retry also fails.
+	m = send(m, rune1('r'))
+	if m.refreshErr != nil {
+		t.Fatal("manual refresh did not clear the failure marker")
+	}
+	m = send(m, fetchErrMsg{err: errors.New("still down")})
+	if m.err == nil || strings.Contains(m.renderTabs(), "refresh failed") {
+		t.Fatalf("manual failure: err=%v; want the error screen alone, no tab-bar marker", m.err)
+	}
+	m = send(m, cyclesLoadedMsg{cycles: m.table.all, fetched: true})
+	if m.err != nil || m.refreshErr != nil {
+		t.Fatal("fetched load did not clear the failure state")
+	}
+}
+
+// TestWindowChangeDuringAutoRefresh: applying a date window re-publishes the
+// cached snapshot while a background fetch is in flight; that cache re-publish
+// must not resolve the refresh flags, or the in-flight failure would take the
+// loud path (and the next tick would race a second fetch).
+func TestWindowChangeDuringAutoRefresh(t *testing.T) {
+	m := testModelAuto(t, 30*time.Second)
+	m = send(m, autoRefreshMsg{seq: m.refreshSeq})
+	m = send(m, cyclesLoadedMsg{cycles: m.table.all}) // reloadCmd shape: no fetched flag
+	if !m.refreshing {
+		t.Fatal("cache re-publish resolved the in-flight background refresh")
+	}
+	m = send(m, fetchErrMsg{err: errors.New("boom"), background: true})
+	if m.err != nil || m.refreshErr == nil {
+		t.Fatalf("err=%v refreshErr=%v; want the quiet path after a window change", m.err, m.refreshErr)
+	}
+}
+
+// TestAutoRefreshIndicator: the armed interval is flagged on the tab bar (the
+// re-fetch is otherwise silent) and reads as paused after R — a paused timer
+// must stay distinguishable from no timer at all.
+func TestAutoRefreshIndicator(t *testing.T) {
+	m := testModel(t)
+	if strings.Contains(m.renderTabs(), "auto") {
+		t.Fatal("tab bar shows an auto marker with no interval configured")
+	}
+	m = testModelAuto(t, 5*time.Minute)
+	if out := m.renderTabs(); !strings.Contains(out, "auto 5m") || strings.Contains(out, "paused") {
+		t.Fatalf("tab bar missing armed auto marker:\n%s", out)
+	}
+	m = send(m, rune1('R'))
+	if out := m.renderTabs(); !strings.Contains(out, "auto 5m paused") {
+		t.Fatalf("tab bar missing paused marker:\n%s", out)
+	}
+}
+
+// TestManualRefreshDuringAutoRefresh: r while a background fetch is in flight
+// surfaces it as the loading screen instead of racing a second fetch — and its
+// failure then takes the loud path, because the user is watching for it.
+func TestManualRefreshDuringAutoRefresh(t *testing.T) {
+	m := testModelAuto(t, 30*time.Second)
+	m = send(m, autoRefreshMsg{seq: m.refreshSeq})
+	m = send(m, rune1('r'))
+	if !m.loading || m.refreshing {
+		t.Fatalf("loading=%v refreshing=%v; want promoted to the loading screen", m.loading, m.refreshing)
+	}
+	m = send(m, fetchErrMsg{err: errors.New("boom"), background: true})
+	if m.loading || m.err == nil {
+		t.Fatalf("loading=%v err=%v; a promoted fetch's failure must reach the error screen", m.loading, m.err)
+	}
+}
+
+// TestIntervalLabel pins the tab-bar interval format: Duration.String minus
+// its trailing zero units.
+func TestIntervalLabel(t *testing.T) {
+	cases := []struct {
+		in   time.Duration
+		want string
+	}{
+		{30 * time.Second, "30s"},
+		{90 * time.Second, "1m30s"},
+		{5 * time.Minute, "5m"},
+		{time.Hour, "1h"},
+		{90 * time.Minute, "1h30m"},
+	}
+	for _, tc := range cases {
+		if got := intervalLabel(tc.in); got != tc.want {
+			t.Errorf("intervalLabel(%v) = %q, want %q", tc.in, got, tc.want)
+		}
+	}
+}
+
+// TestDetailFollowsRefresh: a refresh re-resolves the open detail view against
+// the new cycle set — updated figures re-render in place, and a cycle that
+// disappeared (window change, refresh) drops the selection instead of showing
+// stale figures. Auto-refresh made this easy to hit, since the set can now
+// change with no keypress.
+func TestDetailFollowsRefresh(t *testing.T) {
+	m := testModel(t)
+	m = send(m, tea.KeyMsg{Type: tea.KeyEnter}) // open detail for the selected cycle
+	if m.active != viewDetail || !m.detail.hasSel {
+		t.Fatal("detail did not open")
+	}
+	updated := m.detail.cycle
+	updated.NetProfit += 1000
+	m = send(m, cyclesLoadedMsg{cycles: []model.Cycle{updated}})
+	if !m.detail.hasSel || m.detail.cycle.NetProfit != updated.NetProfit {
+		t.Fatalf("detail not refreshed: hasSel=%v profit=%v, want %v",
+			m.detail.hasSel, m.detail.cycle.NetProfit, updated.NetProfit)
+	}
+	m = send(m, cyclesLoadedMsg{cycles: nil})
+	if m.detail.hasSel {
+		t.Fatal("detail kept a cycle the refresh removed")
 	}
 }

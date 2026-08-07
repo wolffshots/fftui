@@ -37,8 +37,18 @@ type cyclesLoadedMsg struct {
 	market     *model.MarketConditions
 	marketYear *model.MarketConditions // year-long history for the trend strip
 	now        time.Time               // fetch-time "today"; zero when embedding pre-fetched data
+	fetched    bool                    // true from fetchCmd; cache re-publishes (reloadCmd, LoadedMsg) leave the refresh flags alone
 }
-type fetchErrMsg struct{ err error }
+type fetchErrMsg struct {
+	err        error
+	background bool // an auto-refresh failure: keep the body, flag the tab bar
+}
+
+// autoRefreshMsg is the periodic re-fetch tick — its own type so the timer
+// path can't be confused with a fetch result. seq guards against doubled tick
+// chains: a tick armed before a pause/resume carries a stale sequence number
+// and is dropped instead of re-arming alongside the fresh chain.
+type autoRefreshMsg struct{ seq int }
 
 // Today lives in internal/data; aliased here so existing callers (main.go)
 // stay unchanged.
@@ -61,6 +71,16 @@ type RootModel struct {
 	spin         spinner.Model
 	loading      bool
 	err          error
+
+	// Auto-refresh (--refresh-interval; R pauses/resumes): a background tick
+	// re-fetches without the loading screen a manual r shows. refreshing marks
+	// that quiet in-flight fetch, and refreshErr keeps its failure on the tab
+	// bar while the last good data stays on screen.
+	refreshEvery time.Duration // 0 disables the tick loop
+	autoRefresh  bool          // session toggle; starts on when an interval is set
+	refreshing   bool
+	refreshErr   error
+	refreshSeq   int // current tick chain; older ticks are stale
 
 	// Date-window editor (w): while open it replaces the help footer and
 	// captures all keys, mirroring how the table's / filter captures input.
@@ -87,8 +107,10 @@ type RootModel struct {
 // New builds the root model. rates carries the idle-cash rate and tax rate used
 // for the with-idle and after-tax annualised figures; allow carries the annual
 // SDA/FIA limits for the planning figures (a zero total disables them); fees is
-// the per-cycle fee schedule for the fee-aware capital projections.
-func New(svc *data.Service, now time.Time, rates analytics.Rates, allow analytics.Allowances, fees analytics.Fees) RootModel {
+// the per-cycle fee schedule for the fee-aware capital projections;
+// refreshEvery re-fetches automatically on that interval (0 disables it, R
+// pauses/resumes it for the session).
+func New(svc *data.Service, now time.Time, rates analytics.Rates, allow analytics.Allowances, fees analytics.Fees, refreshEvery time.Duration) RootModel {
 	sp := spinner.New()
 	sp.Spinner = spinner.Dot
 	sp.Style = lipgloss.NewStyle().Foreground(accent)
@@ -98,35 +120,60 @@ func New(svc *data.Service, now time.Time, rates analytics.Rates, allow analytic
 	wi.Prompt = "date window: "
 	wi.CharLimit = 24
 
+	km := newKeyMap()
+	if refreshEvery <= 0 {
+		// Nothing to toggle without --refresh-interval; keep R out of the help
+		// rather than advertise a no-op.
+		km.AutoRefresh.SetEnabled(false)
+	}
+
 	return RootModel{
-		svc:         svc,
-		windowInput: wi,
-		now:         now,
-		rates:       rates,
-		keys:        newKeyMap(),
-		help:        help.New(),
-		spin:        sp,
-		loading:     true,
-		active:      viewTable,
-		table:       newTableModel(rates, fees),
-		analytics:   newAnalyticsModel(now, rates, allow, fees),
-		detail:      newDetailModel(fees),
-		charts:      newChartsModel(now, rates),
-		live:        newLiveModel(),
+		svc:          svc,
+		windowInput:  wi,
+		now:          now,
+		rates:        rates,
+		keys:         km,
+		help:         help.New(),
+		spin:         sp,
+		loading:      true,
+		refreshEvery: refreshEvery,
+		autoRefresh:  refreshEvery > 0,
+		active:       viewTable,
+		table:        newTableModel(rates, fees),
+		analytics:    newAnalyticsModel(now, rates, allow, fees),
+		detail:       newDetailModel(fees),
+		charts:       newChartsModel(now, rates),
+		live:         newLiveModel(),
 	}
 }
 
 func (m RootModel) Init() tea.Cmd {
-	return tea.Batch(m.spin.Tick, fetchCmd(m.svc))
+	return tea.Batch(m.spin.Tick, fetchCmd(m.svc, false), m.autoRefreshTick())
+}
+
+// autoRefreshTick arms the next periodic re-fetch, or returns nil (a no-op in
+// a Batch) when no interval is configured or the toggle is off. Each tick
+// re-arms the next one, so dropping the returned command ends the loop — the
+// same self-rescheduling shape as the spinner's Tick. tea.Tick rather than
+// tea.Every: Every aligns to wall-clock boundaries, which would make several
+// running instances hit the API in lockstep.
+func (m RootModel) autoRefreshTick() tea.Cmd {
+	if !m.autoRefresh || m.refreshEvery <= 0 {
+		return nil
+	}
+	seq := m.refreshSeq
+	return tea.Tick(m.refreshEvery, func(time.Time) tea.Msg { return autoRefreshMsg{seq: seq} })
 }
 
 // fetchCmd runs the service refresh off the UI goroutine and translates the
-// snapshot (or error) into the existing Bubble Tea messages.
-func fetchCmd(svc *data.Service) tea.Cmd {
+// snapshot (or error) into the existing Bubble Tea messages. background marks
+// an auto-refresh fetch, whose failure is flagged quietly on the tab bar
+// instead of taking over the body.
+func fetchCmd(svc *data.Service, background bool) tea.Cmd {
 	return func() tea.Msg {
 		snap, err := svc.Refresh(context.Background())
 		if err != nil {
-			return fetchErrMsg{err}
+			return fetchErrMsg{err: err, background: background}
 		}
 		return cyclesLoadedMsg{
 			cycles:     snap.Cycles,
@@ -134,6 +181,7 @@ func fetchCmd(svc *data.Service) tea.Cmd {
 			market:     snap.Market,
 			marketYear: snap.MarketYear,
 			now:        snap.Now,
+			fetched:    true,
 		}
 	}
 }
@@ -175,6 +223,13 @@ func (m RootModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case cyclesLoadedMsg:
 		m.loading = false
 		m.err = nil
+		if msg.fetched {
+			// Only a real fetch resolves the background-refresh flags — a
+			// cache re-publish (window change mid-flight) mustn't desync an
+			// in-flight one into the loud error path.
+			m.refreshing = false
+			m.refreshErr = nil
+		}
 		if !msg.now.IsZero() {
 			// A refresh also refreshes "today", so elapsed-day counts for the
 			// in-progress period don't go stale in a long-running session.
@@ -191,13 +246,34 @@ func (m RootModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.analytics.setCycles(cs)
 		m.charts.setCycles(cs)
 		m.live.setData(msg.client, msg.market)
+		m.detail.refresh(cs)
 		m.applySizes()
 		return m, nil
 
 	case fetchErrMsg:
+		if msg.background && !m.loading {
+			// A background auto-refresh failed. The service kept the last good
+			// snapshot, so keep showing it and flag the failure on the tab bar
+			// instead of replacing the body with the error screen. (When r
+			// promoted this fetch to the loading screen, m.loading routes its
+			// failure to the loud branch below instead.)
+			m.refreshing = false
+			m.refreshErr = msg.err
+			return m, nil
+		}
 		m.loading = false
 		m.err = msg.err
 		return m, nil
+
+	case autoRefreshMsg:
+		if !m.autoRefresh || msg.seq != m.refreshSeq {
+			return m, nil // paused, or a stale tick from an old chain; let it die
+		}
+		if m.loading || m.refreshing {
+			return m, m.autoRefreshTick() // a fetch is already in flight; just re-arm
+		}
+		m.refreshing = true
+		return m, tea.Batch(fetchCmd(m.svc, true), m.autoRefreshTick())
 
 	case tea.KeyMsg:
 		return m.handleKey(msg)
@@ -264,9 +340,32 @@ func (m RootModel) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		if m.loading {
 			return m, nil // a fetch is already in flight; don't race a second one
 		}
+		if m.refreshing {
+			// A background auto-refresh is already in flight; surface it as
+			// the loading screen instead of racing a second fetch.
+			m.refreshing = false
+			m.loading = true
+			m.err = nil
+			m.refreshErr = nil
+			return m, m.spin.Tick
+		}
 		m.loading = true
 		m.err = nil
-		return m, tea.Batch(m.spin.Tick, fetchCmd(m.svc))
+		m.refreshErr = nil // the user asked for this fetch; its outcome owns both indicators
+		return m, tea.Batch(m.spin.Tick, fetchCmd(m.svc, false))
+
+	case keyMatches(msg, m.keys.AutoRefresh):
+		if m.refreshEvery <= 0 {
+			return m, nil // no --refresh-interval configured; nothing to toggle
+		}
+		m.autoRefresh = !m.autoRefresh
+		if m.autoRefresh {
+			// Start a fresh tick chain; bumping the sequence kills any tick
+			// still pending from before the pause.
+			m.refreshSeq++
+			return m, m.autoRefreshTick()
+		}
+		return m, nil
 
 	case keyMatches(msg, m.keys.DateWindow):
 		m.editingWindow = true
@@ -408,7 +507,33 @@ func (m RootModel) renderTabs() string {
 	if from, to := m.svc.DateRange(); !from.IsZero() || !to.IsZero() {
 		bar += dimStyle.Render("  window ") + valueStyle.Render(rangeLabel(from, to))
 	}
+	// Auto-refresh re-fetches silently (no loading screen), so show that it's
+	// armed — or paused, and whether its last pass failed — rather than let
+	// the data change (or quietly stop changing) with no visible cause.
+	if m.refreshEvery > 0 {
+		if m.autoRefresh {
+			bar += dimStyle.Render("  auto ") + valueStyle.Render(intervalLabel(m.refreshEvery))
+		} else {
+			bar += dimStyle.Render("  auto " + intervalLabel(m.refreshEvery) + " paused")
+		}
+	}
+	if m.refreshErr != nil {
+		bar += errorStyle.Render("  ⚠ refresh failed")
+	}
 	return tabBarStyle.Render(bar)
+}
+
+// intervalLabel formats the auto-refresh interval without the zero units
+// Duration.String appends ("5m", not "5m0s").
+func intervalLabel(d time.Duration) string {
+	s := d.String()
+	if strings.HasSuffix(s, "m0s") {
+		s = s[:len(s)-2]
+	}
+	if strings.HasSuffix(s, "h0m") {
+		s = s[:len(s)-2]
+	}
+	return s
 }
 
 // rangeLabel formats the active date window, e.g. "2026-03-01 → …".
