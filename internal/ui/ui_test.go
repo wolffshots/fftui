@@ -100,12 +100,103 @@ func TestEscClearsAppliedFilter(t *testing.T) {
 // bar (every view is filtered, so the marker is global); no window, no marker.
 func TestDateWindowIndicator(t *testing.T) {
 	m := testModel(t)
-	if strings.Contains(m.View(), "window") {
+	if strings.Contains(m.renderTabs(), "window") {
 		t.Fatal("tab bar shows a window marker with no date range set")
 	}
 	m.svc.SetDateRange(time.Date(2026, 3, 1, 0, 0, 0, 0, time.UTC), time.Time{})
-	if out := m.View(); !strings.Contains(out, "window 2026-03-01 → …") {
+	if out := m.renderTabs(); !strings.Contains(out, "window 2026-03-01 → …") {
 		t.Fatalf("tab bar missing window marker:\n%s", out)
+	}
+}
+
+// TestDateWindowInteractive: `w` opens the footer editor; a valid window
+// narrows the data from the cached fetch (no refetch), a bad value keeps the
+// editor open with an error, and wiping the value clears the window.
+func TestDateWindowInteractive(t *testing.T) {
+	svc := data.NewService(model.NewCSVSource("../../testdata/cycles.csv"))
+	snap, err := svc.Refresh(context.Background())
+	if err != nil {
+		t.Fatalf("refresh: %v", err)
+	}
+	now := time.Date(2026, 7, 10, 0, 0, 0, 0, time.UTC)
+	m := New(svc, now, analytics.Rates{Idle: 0.06, Tax: 0.41},
+		analytics.Allowances{SDALimit: 2_000_000, FIALimit: 10_000_000}, analytics.DefaultFees())
+	m = send(m, cyclesLoadedMsg{cycles: snap.Cycles, now: snap.Now})
+	m = send(m, tea.WindowSizeMsg{Width: 120, Height: 40})
+
+	// Open the editor and apply an open-ended window.
+	m = send(m, rune1('w'))
+	if !m.editingWindow {
+		t.Fatal("w did not open the window editor")
+	}
+	m = send(m, tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("2026-01-01..")})
+	mm, cmd := m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	m = mm.(RootModel)
+	if m.editingWindow {
+		t.Fatal("enter did not close the editor")
+	}
+	if cmd == nil {
+		t.Fatal("apply issued no reload command")
+	}
+	m = send(m, cmd())
+	if got := len(m.table.all); got != 14 {
+		t.Fatalf("table has %d cycles after windowing, want 14", got)
+	}
+	if !strings.Contains(m.View(), "window 2026-01-01 → …") {
+		t.Fatal("tab bar missing the applied window")
+	}
+
+	// A bad value keeps the editor open and shows the error.
+	m = send(m, rune1('w'))
+	m = send(m, tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("junk")})
+	m = send(m, tea.KeyMsg{Type: tea.KeyEnter})
+	if !m.editingWindow || m.windowErr == "" {
+		t.Fatalf("bad input: editing=%v err=%q; want still editing with an error", m.editingWindow, m.windowErr)
+	}
+	m = send(m, tea.KeyMsg{Type: tea.KeyEsc})
+
+	// Reopen (prefilled with the active window), wipe it, apply: full set back.
+	m = send(m, rune1('w'))
+	if got := m.windowInput.Value(); got != "2026-01-01.." {
+		t.Fatalf("editor prefill = %q, want 2026-01-01..", got)
+	}
+	m = send(m, tea.KeyMsg{Type: tea.KeyCtrlU})
+	mm, cmd = m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	m = mm.(RootModel)
+	m = send(m, cmd())
+	if got := len(m.table.all); got != 43 {
+		t.Fatalf("table has %d cycles after clearing, want 43", got)
+	}
+}
+
+// TestParseWindow pins the editor grammar: from..to, either side optional.
+func TestParseWindow(t *testing.T) {
+	mar := time.Date(2026, 3, 1, 0, 0, 0, 0, time.UTC)
+	jun := time.Date(2026, 6, 30, 0, 0, 0, 0, time.UTC)
+	zero := time.Time{}
+	cases := []struct {
+		in       string
+		from, to time.Time
+		wantErr  bool
+	}{
+		{"", zero, zero, false},
+		{"2026-03-01..2026-06-30", mar, jun, false},
+		{"2026-03-01..", mar, zero, false},
+		{"..2026-06-30", zero, jun, false},
+		{" 2026-03-01 .. ", mar, zero, false},
+		{"2026-03-01", zero, zero, true},             // no separator
+		{"junk..", zero, zero, true},                 // bad date
+		{"2026-06-30..2026-03-01", zero, zero, true}, // inverted
+	}
+	for _, tc := range cases {
+		from, to, err := parseWindow(tc.in)
+		if (err != nil) != tc.wantErr {
+			t.Errorf("parseWindow(%q) err = %v, wantErr %v", tc.in, err, tc.wantErr)
+			continue
+		}
+		if err == nil && (!from.Equal(tc.from) || !to.Equal(tc.to)) {
+			t.Errorf("parseWindow(%q) = %v..%v, want %v..%v", tc.in, from, to, tc.from, tc.to)
+		}
 	}
 }
 

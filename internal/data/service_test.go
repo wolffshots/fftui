@@ -88,6 +88,43 @@ func TestServiceDateRange(t *testing.T) {
 	}
 }
 
+// countingSource counts Fetch calls so tests can assert a window change costs
+// no source round trip.
+type countingSource struct {
+	inner model.CycleSource
+	n     int
+}
+
+func (c *countingSource) Fetch(ctx context.Context) ([]model.Cycle, error) {
+	c.n++
+	return c.inner.Fetch(ctx)
+}
+
+// TestServiceSetDateRangeRepublishes: changing the window after a refresh
+// re-filters the cached fetch and publishes it immediately — no refetch —
+// and clearing it restores the full set.
+func TestServiceSetDateRangeRepublishes(t *testing.T) {
+	src := &countingSource{inner: model.NewCSVSource("../../testdata/cycles.csv")}
+	svc := NewService(src)
+	if _, err := svc.Refresh(context.Background()); err != nil {
+		t.Fatalf("Refresh: %v", err)
+	}
+
+	svc.SetDateRange(time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC), time.Time{})
+	if snap, _ := svc.Latest(); len(snap.Cycles) != 14 {
+		t.Fatalf("windowed Latest has %d cycles, want 14", len(snap.Cycles))
+	}
+
+	svc.SetDateRange(time.Time{}, time.Time{})
+	if snap, _ := svc.Latest(); len(snap.Cycles) != 43 {
+		t.Fatalf("cleared Latest has %d cycles, want 43", len(snap.Cycles))
+	}
+
+	if src.n != 1 {
+		t.Fatalf("window changes hit the source: %d fetches, want 1", src.n)
+	}
+}
+
 // TestServiceRefreshError: a source failure is returned and published, with no
 // snapshot to hand back.
 func TestServiceRefreshError(t *testing.T) {

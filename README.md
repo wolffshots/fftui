@@ -72,6 +72,10 @@ go run . --from 2026-03-01                  # this SA tax year onward
 go run . --from 2026-01-01 --to 2026-06-30  # H1 2026 only
 ```
 
+Inside the TUI, `w` opens a window editor (`from..to`, either side optional,
+empty shows all) that re-cuts the already-loaded data instantly — no refetch.
+Flags/config seed the initial window; `w` adjusts it for the session.
+
 To make a window stick between sessions, set `FF_FROM` / `FF_TO` in `.env` or
 the user config file (`fftui --init-config`); an explicit flag still overrides,
 so `--from=""` clears a configured bound for one run.
@@ -198,7 +202,7 @@ every page offers a retry.
 ## Views
 
 `1` Cycles table · `2` Analytics · `3` Detail · `4` Charts. `?` toggles full
-help; `r` refreshes; `q` quits.
+help; `w` edits the date window (from any view); `r` refreshes; `q` quits.
 
 - **Table** — all cycles; `s`/`S` sort, `/` filter, `enter` opens detail. The
   `Spread%` column is the effective spread the cycle caught (gross earnings

@@ -2,10 +2,13 @@ package ui
 
 import (
 	"context"
+	"fmt"
+	"strings"
 	"time"
 
 	"github.com/charmbracelet/bubbles/help"
 	"github.com/charmbracelet/bubbles/spinner"
+	"github.com/charmbracelet/bubbles/textinput"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 
@@ -59,6 +62,12 @@ type RootModel struct {
 	loading      bool
 	err          error
 
+	// Date-window editor (w): while open it replaces the help footer and
+	// captures all keys, mirroring how the table's / filter captures input.
+	windowInput   textinput.Model
+	editingWindow bool
+	windowErr     string
+
 	active viewID
 
 	table     tableModel
@@ -84,20 +93,26 @@ func New(svc *data.Service, now time.Time, rates analytics.Rates, allow analytic
 	sp.Spinner = spinner.Dot
 	sp.Style = lipgloss.NewStyle().Foreground(accent)
 
+	wi := textinput.New()
+	wi.Placeholder = "from..to (YYYY-MM-DD, either side optional; empty shows all)"
+	wi.Prompt = "date window: "
+	wi.CharLimit = 24
+
 	return RootModel{
-		svc:       svc,
-		now:       now,
-		rates:     rates,
-		keys:      newKeyMap(),
-		help:      help.New(),
-		spin:      sp,
-		loading:   true,
-		active:    viewTable,
-		table:     newTableModel(rates, fees),
-		analytics: newAnalyticsModel(now, rates, allow, fees),
-		detail:    newDetailModel(fees),
-		charts:    newChartsModel(now, rates),
-		live:      newLiveModel(),
+		svc:         svc,
+		windowInput: wi,
+		now:         now,
+		rates:       rates,
+		keys:        newKeyMap(),
+		help:        help.New(),
+		spin:        sp,
+		loading:     true,
+		active:      viewTable,
+		table:       newTableModel(rates, fees),
+		analytics:   newAnalyticsModel(now, rates, allow, fees),
+		detail:      newDetailModel(fees),
+		charts:      newChartsModel(now, rates),
+		live:        newLiveModel(),
 	}
 }
 
@@ -112,6 +127,24 @@ func fetchCmd(svc *data.Service) tea.Cmd {
 		snap, err := svc.Refresh(context.Background())
 		if err != nil {
 			return fetchErrMsg{err}
+		}
+		return cyclesLoadedMsg{
+			cycles:     snap.Cycles,
+			client:     snap.Client,
+			market:     snap.Market,
+			marketYear: snap.MarketYear,
+			now:        snap.Now,
+		}
+	}
+}
+
+// reloadCmd re-reads the service's published snapshot — used after a window
+// change, which re-filters the cached fetch, so no source round trip happens.
+func reloadCmd(svc *data.Service) tea.Cmd {
+	return func() tea.Msg {
+		snap, _ := svc.Latest()
+		if snap == nil {
+			return nil // nothing fetched yet; the window applies on first load
 		}
 		return cyclesLoadedMsg{
 			cycles:     snap.Cycles,
@@ -175,6 +208,36 @@ func (m RootModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 }
 
 func (m RootModel) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+	// While the date-window editor is open it captures every key, like the
+	// table filter below.
+	if m.editingWindow {
+		switch msg.String() {
+		case "enter":
+			from, to, err := parseWindow(m.windowInput.Value())
+			if err != nil {
+				m.windowErr = err.Error()
+				return m, nil
+			}
+			m.editingWindow = false
+			m.windowErr = ""
+			m.windowInput.Blur()
+			m.svc.SetDateRange(from, to)
+			m.applySizes()
+			// SetDateRange already re-published the re-windowed snapshot from
+			// the cached fetch; reload it without touching the source.
+			return m, reloadCmd(m.svc)
+		case "esc":
+			m.editingWindow = false
+			m.windowErr = ""
+			m.windowInput.Blur()
+			m.applySizes()
+			return m, nil
+		}
+		var cmd tea.Cmd
+		m.windowInput, cmd = m.windowInput.Update(msg)
+		return m, cmd
+	}
+
 	// While the table filter is capturing input, route keys straight to it so
 	// typing (including q, r, digits) isn't hijacked by global shortcuts.
 	if m.active == viewTable && m.table.filtering {
@@ -204,6 +267,15 @@ func (m RootModel) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		m.loading = true
 		m.err = nil
 		return m, tea.Batch(m.spin.Tick, fetchCmd(m.svc))
+
+	case keyMatches(msg, m.keys.DateWindow):
+		m.editingWindow = true
+		m.windowErr = ""
+		m.windowInput.SetValue(windowValue(m.svc.DateRange()))
+		m.windowInput.CursorEnd()
+		m.windowInput.Focus()
+		m.applySizes()
+		return m, textinput.Blink
 
 	case keyMatches(msg, m.keys.Table):
 		m.active = viewTable
@@ -352,5 +424,58 @@ func rangeLabel(from, to time.Time) string {
 }
 
 func (m RootModel) renderHelp() string {
+	if m.editingWindow {
+		line := m.windowInput.View()
+		if m.windowErr != "" {
+			line += "  " + errorStyle.Render(m.windowErr)
+		}
+		return footerStyle.Width(m.width).Render(line)
+	}
 	return footerStyle.Width(m.width).Render(m.help.View(m.keys))
+}
+
+// parseWindow parses the editor's "from..to" value (YYYY-MM-DD each side,
+// either optional). Empty input clears the window.
+func parseWindow(s string) (from, to time.Time, err error) {
+	s = strings.TrimSpace(s)
+	if s == "" {
+		return time.Time{}, time.Time{}, nil
+	}
+	lo, hi, ok := strings.Cut(s, "..")
+	if !ok {
+		return from, to, fmt.Errorf("use from..to (either side optional)")
+	}
+	parse := func(v string) (time.Time, error) {
+		v = strings.TrimSpace(v)
+		if v == "" {
+			return time.Time{}, nil
+		}
+		return time.Parse("2006-01-02", v)
+	}
+	if from, err = parse(lo); err != nil {
+		return from, to, fmt.Errorf("%q is not YYYY-MM-DD", strings.TrimSpace(lo))
+	}
+	if to, err = parse(hi); err != nil {
+		return from, to, fmt.Errorf("%q is not YYYY-MM-DD", strings.TrimSpace(hi))
+	}
+	if !from.IsZero() && !to.IsZero() && to.Before(from) {
+		return from, to, fmt.Errorf("window ends before it starts")
+	}
+	return from, to, nil
+}
+
+// windowValue is the editable text for the current window ("" when unset) —
+// the inverse of parseWindow, used to prefill the editor.
+func windowValue(from, to time.Time) string {
+	if from.IsZero() && to.IsZero() {
+		return ""
+	}
+	f, t := "", ""
+	if !from.IsZero() {
+		f = from.Format("2006-01-02")
+	}
+	if !to.IsZero() {
+		t = to.Format("2006-01-02")
+	}
+	return f + ".." + t
 }
