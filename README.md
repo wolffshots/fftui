@@ -246,13 +246,17 @@ data current without anyone pressing refresh.
   rate, and cumulative profit.
 - **Live** — the in-progress cycle's status, the live market spread with a
   history sparkline, and your funds and SDA/FIA balances (live source only).
-- **Returns** — what a cycle earns at each capital size for the *current*
-  spread, run through the fee waterfall below: gross earnings, third-party
+- **Returns** — what a cycle earns at each capital size at one spread, run
+  through the fee waterfall below: gross earnings, third-party
   fees, gross profit, FF's tier share, net profit, net return, and the share of
   the spread you keep. The row for your current capital is marked. Below the
   ladder every constituent part of the fee figures is spelled out in statement
-  order, with the break-even capital for that spread. The spread comes from the
-  live market feed, or in CSV mode from the trailing year of your own cycles.
+  order, with the break-even capital for that spread. `tab` cycles the
+  projected spread through now / lower / higher / realised — the live feed, the
+  lowest and highest spread the market printed in the last 30 days, and the
+  mean spread your own cycles actually caught over the trailing year. CSV mode
+  has no market history, so it offers now (which falls back to that trailing
+  mean) and realised only.
 
 ## Methodology
 

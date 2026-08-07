@@ -251,7 +251,7 @@ func (m RootModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.charts.setCycles(cs)
 		m.live.setData(msg.client, msg.market)
 		m.returns.setCycles(cs)
-		m.returns.setData(msg.client, msg.market)
+		m.returns.setData(msg.client, msg.market, msg.marketYear)
 		m.detail.refresh(cs)
 		m.applySizes()
 		return m, nil
@@ -439,7 +439,7 @@ func (m RootModel) forward(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, cmd
 	case viewReturns:
 		var cmd tea.Cmd
-		m.returns, cmd = m.returns.update(msg)
+		m.returns, cmd = m.returns.update(msg, m.keys)
 		return m, cmd
 	}
 	return m, nil

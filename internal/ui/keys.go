@@ -15,6 +15,8 @@ type keyMap struct {
 	Up   key.Binding
 	Down key.Binding
 
+	// SubTab is shared: it cycles the analytics bucket period and the returns
+	// spread scenario, so its help text names both rather than one.
 	SubTab     key.Binding
 	ToggleDead key.Binding
 	SortCol    key.Binding
@@ -40,7 +42,7 @@ func newKeyMap() keyMap {
 		Returns:     key.NewBinding(key.WithKeys("6"), key.WithHelp("6", "returns")),
 		Up:          key.NewBinding(key.WithKeys("up", "k"), key.WithHelp("↑/k", "up")),
 		Down:        key.NewBinding(key.WithKeys("down", "j"), key.WithHelp("↓/j", "down")),
-		SubTab:      key.NewBinding(key.WithKeys("tab"), key.WithHelp("tab", "year/qtr/month")),
+		SubTab:      key.NewBinding(key.WithKeys("tab"), key.WithHelp("tab", "period/scenario")),
 		ToggleDead:  key.NewBinding(key.WithKeys("a"), key.WithHelp("a", "active/incl-dead")),
 		SortCol:     key.NewBinding(key.WithKeys("s"), key.WithHelp("s", "sort col")),
 		SortDir:     key.NewBinding(key.WithKeys("S"), key.WithHelp("S", "sort dir")),

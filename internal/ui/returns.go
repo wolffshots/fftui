@@ -14,20 +14,51 @@ import (
 	"github.com/wolffshots/fftui/internal/model"
 )
 
-// returnsModel is view 6: what a cycle earns at each capital size for the
-// CURRENT spread, run through the same fee waterfall as the cycle statements.
-// The spread comes from the live market feed, or (CSV mode) from the trailing
-// year of cycles backed out through the fee model.
+// returnsModel is view 6: what a cycle earns at each capital size at one
+// spread, run through the same fee waterfall as the cycle statements. tab
+// cycles that spread through the scenarios below, so the ladder can be read at
+// a worse and a better market than today's.
 type returnsModel struct {
-	vp     viewport.Model
-	fees   analytics.Fees
-	cycles []model.Cycle
-	now    time.Time
-	market *model.MarketConditions
-	client *model.ClientStatus
-	width  int
-	height int
+	vp         viewport.Model
+	fees       analytics.Fees
+	cycles     []model.Cycle
+	now        time.Time
+	market     *model.MarketConditions
+	marketYear *model.MarketConditions // 365d history; the 7d Market series is too short for a 30d window
+	client     *model.ClientStatus
+	scenario   spreadScenario
+	width      int
+	height     int
 }
+
+// spreadScenario selects which spread the ladder is projected at.
+type spreadScenario int
+
+const (
+	scenarioNow      spreadScenario = iota // live market feed (CSV mode: the trailing average)
+	scenarioLower                          // lowest spread the market actually printed recently
+	scenarioHigher                         // highest one
+	scenarioRealised                       // what the account actually caught, after execution timing
+)
+
+var scenarioOrder = []spreadScenario{scenarioNow, scenarioLower, scenarioHigher, scenarioRealised}
+
+func (s spreadScenario) String() string {
+	switch s {
+	case scenarioLower:
+		return "lower"
+	case scenarioHigher:
+		return "higher"
+	case scenarioRealised:
+		return "realised"
+	}
+	return "now"
+}
+
+// scenarioWindow is the history window (days) the lower/higher cases are the
+// bounds of: long enough to have seen a bad and a good market, short enough to
+// still describe the current one.
+const scenarioWindow = 30
 
 // ladder is the capital ladder: every FF fee-tier boundary plus round steps
 // either side, so the tier jumps are visible.
@@ -42,8 +73,8 @@ func newReturnsModel(now time.Time, fees analytics.Fees) returnsModel {
 
 func (m *returnsModel) setCycles(cs []model.Cycle) { m.cycles = cs }
 
-func (m *returnsModel) setData(c *model.ClientStatus, mk *model.MarketConditions) {
-	m.client, m.market = c, mk
+func (m *returnsModel) setData(c *model.ClientStatus, mk, year *model.MarketConditions) {
+	m.client, m.market, m.marketYear = c, mk, year
 }
 
 func (m *returnsModel) setSize(w, h int) {
@@ -51,10 +82,59 @@ func (m *returnsModel) setSize(w, h int) {
 	m.vp.Width, m.vp.Height = w, h
 }
 
-func (m returnsModel) update(msg tea.Msg) (returnsModel, tea.Cmd) {
+func (m returnsModel) update(msg tea.Msg, k keyMap) (returnsModel, tea.Cmd) {
+	if key, ok := msg.(tea.KeyMsg); ok && keyMatches(key, k.SubTab) {
+		m.scenario = m.nextScenario()
+		m.vp.GotoTop()
+		return m, nil
+	}
 	var cmd tea.Cmd
 	m.vp, cmd = m.vp.Update(msg)
 	return m, cmd
+}
+
+// nextScenario is the next scenario that has an input behind it, wrapping.
+// Scenarios that cannot be derived from the current data are skipped rather
+// than selected and left projecting nothing.
+func (m returnsModel) nextScenario() spreadScenario {
+	avail := m.available()
+	for i, s := range avail {
+		if s == m.scenario {
+			return avail[(i+1)%len(avail)]
+		}
+	}
+	return m.scenario
+}
+
+// available lists the scenarios this data supports, in strip order.
+func (m returnsModel) available() []spreadScenario {
+	var out []spreadScenario
+	for _, s := range scenarioOrder {
+		if _, _, ok := m.spreadFor(s); ok {
+			out = append(out, s)
+		}
+	}
+	return out
+}
+
+// scenarioTabs mirrors the Analytics granularity strip. CSV mode has no market
+// history, so the observed bounds are left off the strip entirely — with the
+// reason — rather than offered against a number they cannot be derived from.
+func (m returnsModel) scenarioTabs() string {
+	var parts []string
+	for _, s := range m.available() {
+		if s == m.scenario {
+			parts = append(parts, tabActiveStyle.Render(s.String()))
+		} else {
+			parts = append(parts, tabInactiveStyle.Render(s.String()))
+		}
+	}
+	strip := dimStyle.Render("tab ▸ ") + lipgloss.JoinHorizontal(lipgloss.Top, parts...)
+	// Both bounds come from the one history series, so one check covers both.
+	if _, _, ok := m.spreadFor(scenarioLower); !ok {
+		strip += dimStyle.Render("  (lower/higher need the live market history)")
+	}
+	return strip
 }
 
 func (m returnsModel) view() string {
@@ -63,17 +143,47 @@ func (m returnsModel) view() string {
 	return vp.View()
 }
 
-// spread resolves the spread to project at: the live market feed first, else
-// the trailing-year average backed out of the cycles.
+// spread resolves the spread to project at, for the active scenario.
 func (m returnsModel) spread() (frac float64, source string, ok bool) {
+	return m.spreadFor(m.scenario)
+}
+
+// spreadFor resolves one scenario to a spread and the label saying how it was
+// derived. This is a money view, so a scenario with no input reports ok=false
+// instead of a zero: the caller drops it rather than project off it.
+func (m returnsModel) spreadFor(s spreadScenario) (frac float64, source string, ok bool) {
+	realised := func() (float64, int) { return analytics.AvgSpread(m.cycles, m.now, m.fees) }
+
+	switch s {
+	case scenarioLower, scenarioHigher:
+		if m.marketYear == nil {
+			return 0, "", false
+		}
+		low, high, ok := analytics.SpreadRange(m.marketYear.History, m.marketYear.Period, scenarioWindow)
+		if !ok || low <= 0 {
+			return 0, "", false
+		}
+		if s == scenarioLower {
+			return low / 100, fmt.Sprintf("lowest spread in the last %d days of market history", scenarioWindow), true
+		}
+		return high / 100, fmt.Sprintf("highest spread in the last %d days of market history", scenarioWindow), true
+
+	case scenarioRealised:
+		avg, n := realised()
+		if n == 0 || avg <= 0 {
+			return 0, "", false
+		}
+		return avg, fmt.Sprintf("mean of the %d cycles you traded in the last year, backed out through the fee model", n), true
+	}
+
 	if m.market != nil && m.market.Current.Spread > 0 {
 		return m.market.Current.Spread / 100, "live market feed", true
 	}
-	avg, n := analytics.AvgSpread(m.cycles, m.now, m.fees)
+	avg, n := realised()
 	if n == 0 || avg <= 0 {
 		return 0, "", false
 	}
-	return avg, fmt.Sprintf("mean of your last %d cycles — no live feed in CSV mode", n), true
+	return avg, fmt.Sprintf("mean of your last %d cycles — no live feed in CSV mode, so this is the realised figure", n), true
 }
 
 // currentCapital is the in-flight cycle's capital when live, else the latest
@@ -132,10 +242,11 @@ func (m returnsModel) render() string {
 	}
 
 	var b strings.Builder
+	b.WriteString(m.scenarioTabs() + "\n\n")
 	b.WriteString(titleStyle.Render("Expected return per cycle") +
 		dimStyle.Render("  at a gross-earnings spread of ") +
 		valueStyle.Render(spreadFmt(spread*100)) +
-		dimStyle.Render("  ("+source+")") + "\n\n")
+		dimStyle.Render("  ("+m.scenario.String()+": "+source+")") + "\n\n")
 
 	header := lipgloss.NewStyle().Foreground(accent).Bold(true).Render(
 		rightPad("Capital", wCapital) + rightPad("Gross earn", wEarn) +

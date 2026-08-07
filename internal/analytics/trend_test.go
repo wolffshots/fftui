@@ -95,3 +95,27 @@ func TestSpreadTrend(t *testing.T) {
 		t.Error("too few samples should give no result")
 	}
 }
+
+func TestSpreadRange(t *testing.T) {
+	points := make([]model.MarketPoint, 100)
+	for i := range points {
+		points[i].Spread = 1.0
+	}
+	// The 30d window is the last 8 of 100 samples over 365d, so the extremes
+	// before it must not count.
+	points[10].Spread = 0.1
+	points[20].Spread = 2.9
+	points[95].Spread = 0.6
+	points[98].Spread = 1.4
+
+	low, high, ok := SpreadRange(points, 365, 30)
+	if !ok {
+		t.Fatal("expected a result")
+	}
+	assertClose(t, "low spread", low, 0.6, 1e-12)
+	assertClose(t, "high spread", high, 1.4, 1e-12)
+
+	if _, _, ok := SpreadRange(points[:5], 365, 30); ok {
+		t.Error("too few samples should give no result")
+	}
+}

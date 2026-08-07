@@ -405,12 +405,73 @@ func TestReturnsView(t *testing.T) {
 }
 
 // TestReturnsViewCSVFallback: with no live feed the view projects the trailing
-// average spread backed out of the cycles instead of going blank.
+// average spread backed out of the cycles instead of going blank, and offers
+// only the scenarios CSV mode can actually derive.
 func TestReturnsViewCSVFallback(t *testing.T) {
 	m := testModel(t) // no client/market — CSV mode
 	out := m.returns.render()
 	if !strings.Contains(out, "no live feed in CSV mode") {
 		t.Errorf("expected the CSV-mode spread source, got:\n%s", out)
+	}
+	if !strings.Contains(out, "lower/higher need the live market history") {
+		t.Errorf("expected the unavailable-scenario note, got:\n%s", out)
+	}
+	if got := m.returns.available(); len(got) != 2 {
+		t.Errorf("CSV mode should offer now + realised only, got %v", got)
+	}
+}
+
+// TestReturnsSpreadScenarios: tab moves the projection onto the observed
+// 30-day bounds, and the whole ladder moves with it. Gross earnings at R200k:
+// 1.63% → R3,260.00, 0.37% → R740.00 (neither collides with another rung at
+// the other spread).
+func TestReturnsSpreadScenarios(t *testing.T) {
+	m := testModel(t)
+	hist := make([]model.MarketPoint, 40)
+	for i := range hist {
+		hist[i].Spread = 0.80
+	}
+	hist[38].Spread = 1.63 // inside the 30d tail (last 3 of 40 samples over 365d)
+	hist[39].Spread = 0.37
+	mm, _ := m.Update(cyclesLoadedMsg{
+		cycles:     m.table.all,
+		market:     &model.MarketConditions{Current: model.MarketPoint{Spread: 0.80}, Period: 7},
+		marketYear: &model.MarketConditions{History: hist, Period: 365},
+	})
+	m = send(mm.(RootModel), tea.WindowSizeMsg{Width: 130, Height: 60})
+	m = send(m, rune1('6'))
+
+	now := m.returns.render()
+	if !strings.Contains(now, "(now: live market feed)") {
+		t.Fatalf("default scenario should be the live feed, got:\n%s", now)
+	}
+
+	m = send(m, tea.KeyMsg{Type: tea.KeyTab})
+	lower := m.returns.render()
+	for _, want := range []string{"0.37%", "lower: lowest spread in the last 30 days", "R740.00"} {
+		if !strings.Contains(lower, want) {
+			t.Errorf("lower scenario missing %q", want)
+		}
+	}
+	if strings.Contains(lower, "R740.00") == strings.Contains(now, "R740.00") {
+		t.Error("the ladder did not change with the scenario")
+	}
+
+	m = send(m, tea.KeyMsg{Type: tea.KeyTab})
+	higher := m.returns.render()
+	for _, want := range []string{"1.63%", "higher: highest spread in the last 30 days", "R3,260.00"} {
+		if !strings.Contains(higher, want) {
+			t.Errorf("higher scenario missing %q", want)
+		}
+	}
+
+	m = send(m, tea.KeyMsg{Type: tea.KeyTab})
+	if out := m.returns.render(); !strings.Contains(out, "realised: mean of the") {
+		t.Errorf("expected the realised scenario after higher, got:\n%s", out)
+	}
+	m = send(m, tea.KeyMsg{Type: tea.KeyTab}) // wraps
+	if m.returns.scenario != scenarioNow {
+		t.Errorf("scenario should wrap back to now, got %v", m.returns.scenario)
 	}
 }
 

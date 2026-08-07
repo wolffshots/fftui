@@ -81,30 +81,57 @@ func TrendOf(cs []model.Cycle, now time.Time) Trend {
 	return t
 }
 
+// recentWindow is the tail of a history series covering roughly the last
+// `recentDays`. The API returns evenly spaced samples over the requested
+// period, so the window is a proportional slice off the end rather than parsed
+// timestamps. nil with fewer than 10 samples — too few to read anything off.
+func recentWindow(points []model.MarketPoint, periodDays, recentDays int) []model.MarketPoint {
+	n := len(points)
+	if n < 10 || periodDays <= 0 || recentDays <= 0 || recentDays > periodDays {
+		return nil
+	}
+	k := n * recentDays / periodDays
+	if k < 1 {
+		k = 1
+	}
+	return points[n-k:]
+}
+
 // SpreadTrend compares the mean market spread over roughly the last
-// `recentDays` of a history series against the whole series' mean. The API
-// returns evenly spaced samples over the requested period, so the recent
-// window is a proportional slice off the end rather than parsed timestamps.
+// `recentDays` of a history series against the whole series' mean.
 // Spread values are percentages as the API reports them (0.82 = 0.82%).
 // ok is false with fewer than 10 samples.
 func SpreadTrend(points []model.MarketPoint, periodDays, recentDays int) (recent, overall float64, ok bool) {
-	n := len(points)
-	if n < 10 || periodDays <= 0 || recentDays <= 0 || recentDays > periodDays {
+	window := recentWindow(points, periodDays, recentDays)
+	if window == nil {
 		return 0, 0, false
 	}
 	var sum float64
 	for _, p := range points {
 		sum += p.Spread
 	}
-	overall = sum / float64(n)
+	overall = sum / float64(len(points))
 
-	k := n * recentDays / periodDays
-	if k < 1 {
-		k = 1
-	}
 	var recentSum float64
-	for _, p := range points[n-k:] {
+	for _, p := range window {
 		recentSum += p.Spread
 	}
-	return recentSum / float64(k), overall, true
+	return recentSum / float64(len(window)), overall, true
+}
+
+// SpreadRange is the lowest and highest spread over roughly the last
+// `recentDays` of a history series — bounds that really occurred, rather than
+// a round step either side of today's quote. Same window and sample floor as
+// SpreadTrend; percentages as the API reports them.
+func SpreadRange(points []model.MarketPoint, periodDays, recentDays int) (low, high float64, ok bool) {
+	window := recentWindow(points, periodDays, recentDays)
+	if window == nil {
+		return 0, 0, false
+	}
+	low, high = window[0].Spread, window[0].Spread
+	for _, p := range window[1:] {
+		low = math.Min(low, p.Spread)
+		high = math.Max(high, p.Spread)
+	}
+	return low, high, true
 }
