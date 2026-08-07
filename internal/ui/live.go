@@ -28,8 +28,10 @@ func newLiveModel() liveModel {
 
 func (m *liveModel) setData(c *model.ClientStatus, mk *model.MarketConditions) {
 	m.client, m.market = c, mk
+	// No GotoTop: this runs on every (auto-)refresh, and yanking the scroll
+	// away mid-read is worse than a stale offset — SetContent already clamps
+	// it when the content shrinks.
 	m.vp.SetContent(m.render())
-	m.vp.GotoTop()
 }
 
 func (m *liveModel) setSize(w, h int) {

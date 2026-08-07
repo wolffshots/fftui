@@ -43,9 +43,11 @@ func (m *detailModel) setCycle(c model.Cycle) {
 
 // refresh re-resolves the selected cycle against a freshly loaded set, so the
 // detail view can't keep showing figures a refresh or window change replaced.
-// It re-renders in place (keeping the scroll position — this runs on every
-// refresh, not just an explicit selection); a cycle that disappeared from the
-// set drops the selection.
+// It swaps the cycle without re-rendering: the caller's applySizes → setSize
+// re-renders the viewport whenever a cycle is selected, so rendering here would
+// build the same content twice per load. The scroll position survives either
+// way (this runs on every refresh, not just an explicit selection); a cycle
+// that disappeared from the set drops the selection.
 func (m *detailModel) refresh(cs []model.Cycle) {
 	if !m.hasSel {
 		return
@@ -53,7 +55,6 @@ func (m *detailModel) refresh(cs []model.Cycle) {
 	for _, c := range cs {
 		if c.Code == m.cycle.Code {
 			m.cycle = c
-			m.vp.SetContent(m.render())
 			return
 		}
 	}

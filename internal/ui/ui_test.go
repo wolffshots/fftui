@@ -113,6 +113,29 @@ func TestDateWindowIndicator(t *testing.T) {
 	}
 }
 
+// TestTabBarFitsWidth: with every marker lit on an 80-column terminal the bar
+// stays inside the width, and the failure marker is the one that survives the
+// cut — the window is standing state the user set and can re-read, while the
+// failure is the only sign a silent refresh stopped working.
+func TestTabBarFitsWidth(t *testing.T) {
+	m := testModelAuto(t, 5*time.Minute)
+	m = send(m, tea.WindowSizeMsg{Width: 80, Height: 40}) // renderTabs caps on m.width
+	m.svc.SetDateRange(
+		time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC),
+		time.Date(2026, 6, 30, 0, 0, 0, 0, time.UTC))
+	m.refreshErr = errors.New("boom")
+
+	out := m.renderTabs()
+	if !strings.Contains(out, "refresh failed") {
+		t.Fatalf("failure marker truncated away at 80 columns:\n%s", out)
+	}
+	for _, line := range strings.Split(out, "\n") {
+		if w := lipgloss.Width(line); w > 80 {
+			t.Fatalf("tab bar line is %d columns, want <= 80:\n%s", w, line)
+		}
+	}
+}
+
 // TestDateWindowInteractive: `w` opens the footer editor; a valid window
 // narrows the data from the cached fetch (no refetch), a bad value keeps the
 // editor open with an error, and wiping the value clears the window.
@@ -538,7 +561,8 @@ func TestWindowChangeDuringAutoRefresh(t *testing.T) {
 
 // TestAutoRefreshIndicator: the armed interval is flagged on the tab bar (the
 // re-fetch is otherwise silent) and reads as paused after R — a paused timer
-// must stay distinguishable from no timer at all.
+// must stay distinguishable from no timer at all. Pausing also clears a failure
+// marker, since no tick remains that could ever clear it.
 func TestAutoRefreshIndicator(t *testing.T) {
 	m := testModel(t)
 	if strings.Contains(m.renderTabs(), "auto") {
@@ -548,9 +572,13 @@ func TestAutoRefreshIndicator(t *testing.T) {
 	if out := m.renderTabs(); !strings.Contains(out, "auto 5m") || strings.Contains(out, "paused") {
 		t.Fatalf("tab bar missing armed auto marker:\n%s", out)
 	}
+	m.refreshErr = errors.New("boom")
 	m = send(m, rune1('R'))
 	if out := m.renderTabs(); !strings.Contains(out, "auto 5m paused") {
 		t.Fatalf("tab bar missing paused marker:\n%s", out)
+	}
+	if m.refreshErr != nil || strings.Contains(m.renderTabs(), "refresh failed") {
+		t.Fatal("pause stranded the failure marker: no tick is left to clear it")
 	}
 }
 
@@ -611,5 +639,69 @@ func TestDetailFollowsRefresh(t *testing.T) {
 	m = send(m, cyclesLoadedMsg{cycles: nil})
 	if m.detail.hasSel {
 		t.Fatal("detail kept a cycle the refresh removed")
+	}
+}
+
+// TestLiveViewKeepsScroll: a background refresh re-renders the live view in
+// place and the scroll position survives, same as the detail view — GotoTop on
+// every load made the funds block at the bottom unreadable under auto-refresh.
+func TestLiveViewKeepsScroll(t *testing.T) {
+	lm := newLiveModel()
+	lm.setSize(60, 4)
+	client := &model.ClientStatus{
+		Status:         model.TradeStatus{Slug: "trade_loaded", SecondaryText: "Awaiting market conditions"},
+		FundsAvailable: 119422.50,
+		TotalProfit:    19422.50,
+	}
+	market := &model.MarketConditions{
+		Current: model.MarketPoint{Spread: 0.82},
+		History: []model.MarketPoint{{Spread: 0.68}, {Spread: 0.82}},
+		Period:  7,
+	}
+	lm.setData(client, market)
+	lm.vp.SetYOffset(3)
+	lm.setData(client, market)
+	if lm.vp.YOffset != 3 {
+		t.Fatalf("YOffset = %d after a refresh, want 3", lm.vp.YOffset)
+	}
+}
+
+// TestTableKeepsSelectionOnRefresh: a refreshed set can insert rows above the
+// cursor (default sort is newest-first), so the highlight follows the cycle's
+// code — enter must never open a row the user didn't pick.
+func TestTableKeepsSelectionOnRefresh(t *testing.T) {
+	m := testModel(t)
+	m = send(m, rune1('1'))
+	m = send(m, rune1('j'))
+	m = send(m, rune1('j'))
+	sel, ok := m.table.selectedCycle()
+	if !ok {
+		t.Fatal("no selection to preserve")
+	}
+	newest := model.Cycle{Code: "FXNEW", TradeType: "ARB",
+		StartDate: time.Date(2026, 8, 1, 0, 0, 0, 0, time.UTC),
+		EndDate:   time.Date(2026, 8, 5, 0, 0, 0, 0, time.UTC),
+		ZarIn:     1000, ZarOut: 1100, NetProfit: 100}
+	m = send(m, cyclesLoadedMsg{cycles: append([]model.Cycle{newest}, m.table.all...), fetched: true})
+	got, ok := m.table.selectedCycle()
+	if !ok || got.Code != sel.Code {
+		t.Fatalf("selection moved to %q after a refresh, want %q", got.Code, sel.Code)
+	}
+}
+
+// TestNoMarkerOverErrorScreen: while the error screen from a failed manual
+// refresh is up, a failing background tick must not stack the tab-bar marker
+// on top of it — one failure, one report.
+func TestNoMarkerOverErrorScreen(t *testing.T) {
+	m := testModelAuto(t, 30*time.Second)
+	m = send(m, rune1('r'))
+	m = send(m, fetchErrMsg{err: errors.New("manual boom")})
+	if m.err == nil {
+		t.Fatal("manual failure should reach the error screen")
+	}
+	m = send(m, autoRefreshMsg{seq: m.refreshSeq})
+	m = send(m, fetchErrMsg{err: errors.New("background boom"), background: true})
+	if m.refreshErr != nil || strings.Contains(m.renderTabs(), "refresh failed") {
+		t.Fatal("background failure stacked the marker on the error screen")
 	}
 }

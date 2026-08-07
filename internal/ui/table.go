@@ -96,8 +96,23 @@ func tableColumns() []table.Column {
 }
 
 func (m *tableModel) setCycles(cs []model.Cycle) {
+	// Keep the highlight on the same cycle across a reload: a refresh can
+	// insert rows above the cursor (newest-first sort), and enter must not
+	// open a cycle the user never picked — the cursor follows the code, the
+	// same identity the detail view re-resolves by.
+	sel, hadSel := m.selectedCycle()
 	m.all = cs
 	m.rebuild()
+	if !hadSel {
+		return
+	}
+	for i, c := range m.visible {
+		if c.Code == sel.Code {
+			m.tbl.SetCursor(i)
+			return
+		}
+	}
+	// The selected cycle left the set (window change); rebuild already clamped.
 }
 
 func (m *tableModel) setSize(w, h int) {

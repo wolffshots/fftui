@@ -21,8 +21,8 @@ func TestParseDate(t *testing.T) {
 }
 
 // TestEnvDuration: unset falls back to the default, a Go duration parses, and
-// a unitless or garbage value falls back rather than aborting (same forgiving
-// shape as envFloat — the flag still overrides).
+// a unitless or garbage value falls back (with a stderr warning) rather than
+// aborting — the flag still overrides, but the typo can't go unannounced.
 func TestEnvDuration(t *testing.T) {
 	if d := envDuration("FF_TEST_INTERVAL", 0); d != 0 {
 		t.Fatalf("unset = %v, want 0", d)

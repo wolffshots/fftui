@@ -162,3 +162,29 @@ func TestServiceConcurrent(t *testing.T) {
 		t.Fatalf("after concurrent refreshes: snap=%v err=%v", snap, err)
 	}
 }
+
+// TestRefreshKeepsExtras: the live extras are best-effort, so a refresh whose
+// extras pulls fail (or, as here, can't run at all) keeps the previous values
+// instead of blanking the live panels mid-session — nil only ever means
+// "never fetched".
+func TestRefreshKeepsExtras(t *testing.T) {
+	svc := testService()
+	if _, err := svc.Refresh(context.Background()); err != nil {
+		t.Fatalf("refresh: %v", err)
+	}
+	svc.mu.Lock()
+	svc.raw.Client = &model.ClientStatus{FundsAvailable: 42}
+	svc.raw.Market = &model.MarketConditions{Period: 7}
+	svc.mu.Unlock()
+
+	snap, err := svc.Refresh(context.Background())
+	if err != nil {
+		t.Fatalf("refresh: %v", err)
+	}
+	if snap.Client == nil || snap.Client.FundsAvailable != 42 {
+		t.Fatalf("client status not carried forward: %+v", snap.Client)
+	}
+	if snap.Market == nil || snap.Market.Period != 7 {
+		t.Fatalf("market conditions not carried forward: %+v", snap.Market)
+	}
+}

@@ -62,22 +62,6 @@ func main() {
 		os.Exit(1)
 	}
 
-	// Validate the date window up front so a typo fails before any login/OTP.
-	from, err := parseDate("--from", *fromStr)
-	if err != nil {
-		fmt.Fprintln(os.Stderr, err)
-		os.Exit(1)
-	}
-	to, err := parseDate("--to", *toStr)
-	if err != nil {
-		fmt.Fprintln(os.Stderr, err)
-		os.Exit(1)
-	}
-	if !from.IsZero() && !to.IsZero() && to.Before(from) {
-		fmt.Fprintf(os.Stderr, "--to %s is before --from %s\n", *toStr, *fromStr)
-		os.Exit(1)
-	}
-
 	if *showVersion {
 		fmt.Println("fftui", version)
 		return
@@ -108,8 +92,24 @@ func main() {
 		return
 	}
 
-	// After the exit-early modes so a config-seeded interval can't break
-	// --version/--init-config/--logout, but still before any login/OTP.
+	// After the exit-early modes so a config-seeded date window or interval
+	// can't break --version/--init-config/--logout — including --init-config,
+	// the command you reach for to repair a bad config — but still before any
+	// login/OTP, so a typo fails without costing an OTP round trip.
+	from, err := parseDate("--from", *fromStr)
+	if err != nil {
+		fmt.Fprintln(os.Stderr, err)
+		os.Exit(1)
+	}
+	to, err := parseDate("--to", *toStr)
+	if err != nil {
+		fmt.Fprintln(os.Stderr, err)
+		os.Exit(1)
+	}
+	if !from.IsZero() && !to.IsZero() && to.Before(from) {
+		fmt.Fprintf(os.Stderr, "--to %s is before --from %s\n", *toStr, *fromStr)
+		os.Exit(1)
+	}
 	if *refreshEvery != 0 && *refreshEvery < minRefreshInterval {
 		fmt.Fprintf(os.Stderr, "--refresh-interval %s is below the %s minimum\n", *refreshEvery, minRefreshInterval)
 		os.Exit(1)
@@ -194,19 +194,28 @@ func main() {
 		fmt.Printf("web ui on http://%s\n", ln.Addr())
 
 		if *headless {
+			ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+			defer stop()
 			if *refreshEvery > 0 {
 				// No TUI to drive the auto-refresh tick here, so re-fetch the
 				// shared service directly. Best-effort like the initial fetch:
 				// a failure keeps the last good snapshot and shows the page's
-				// error banner.
+				// error banner. Ticking and fetching on ctx means a
+				// SIGINT/SIGTERM ends the loop and cancels an in-flight fetch
+				// rather than leaving both running through shutdown.
 				go func() {
-					for range time.Tick(*refreshEvery) {
-						_, _ = svc.Refresh(context.Background())
+					tick := time.NewTicker(*refreshEvery)
+					defer tick.Stop()
+					for {
+						select {
+						case <-ctx.Done():
+							return
+						case <-tick.C:
+							_, _ = svc.Refresh(ctx)
+						}
 					}
 				}()
 			}
-			ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
-			defer stop()
 			select {
 			case <-ctx.Done():
 			case err := <-webErr:
@@ -334,13 +343,17 @@ func envFloat(name string, def float64) float64 {
 }
 
 // envDuration reads a Go duration from an env var (e.g. "30s", "5m"), falling
-// back to def when unset or unparseable. Used as a flag default so env seeds
-// it and an explicit flag still overrides.
+// back to def when unset or unparseable. Unlike envFloat it warns on stderr
+// before falling back: a wrong rate still shows a wrong number the user can
+// notice, but a wrong interval leaves the feature it configures off with
+// nothing on screen to say so. Used as a flag default so env seeds it and an
+// explicit flag still overrides.
 func envDuration(name string, def time.Duration) time.Duration {
 	if v := os.Getenv(name); v != "" {
 		if d, err := time.ParseDuration(v); err == nil {
 			return d
 		}
+		fmt.Fprintf(os.Stderr, "bad %s: %q is not a Go duration (e.g. 30s, 5m); falling back to %s\n", name, v, def)
 	}
 	return def
 }

@@ -90,9 +90,10 @@ func (s *Service) DateRange() (from, to time.Time) {
 }
 
 // Refresh runs a full fetch: the cycle history, then (for the live source) the
-// best-effort extras — current-cycle status and market spread. If the extras
-// fail, the cycles still load and those fields just stay nil rather than
-// failing the whole refresh.
+// best-effort extras — current-cycle status and market spread. If an extras
+// pull fails, the cycles still load and the previous values are kept (nil only
+// until their first success), so a transient failure can't blank the live
+// panels mid-session.
 func (s *Service) Refresh(ctx context.Context) (*Snapshot, error) {
 	s.fetchMu.Lock()
 	defer s.fetchMu.Unlock()
@@ -107,6 +108,13 @@ func (s *Service) Refresh(ctx context.Context) (*Snapshot, error) {
 		return nil, err
 	}
 	raw := &Snapshot{Cycles: cs, Now: s.now()}
+	// Carry the previous extras forward; each pull below replaces its field on
+	// success, so a failed pull degrades to slightly stale data, not a blank.
+	s.mu.RLock()
+	if prev := s.raw; prev != nil {
+		raw.Client, raw.Market, raw.MarketYear = prev.Client, prev.Market, prev.MarketYear
+	}
+	s.mu.RUnlock()
 	if ff, ok := s.src.(*model.LiveSource); ok {
 		if st, err := ff.FetchClient(ctx); err == nil {
 			raw.Client = st

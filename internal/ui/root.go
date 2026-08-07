@@ -258,7 +258,9 @@ func (m RootModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			// promoted this fetch to the loading screen, m.loading routes its
 			// failure to the loud branch below instead.)
 			m.refreshing = false
-			m.refreshErr = msg.err
+			if m.err == nil { // the error screen already reports it; don't stack the marker on top
+				m.refreshErr = msg.err
+			}
 			return m, nil
 		}
 		m.loading = false
@@ -355,9 +357,6 @@ func (m RootModel) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m, tea.Batch(m.spin.Tick, fetchCmd(m.svc, false))
 
 	case keyMatches(msg, m.keys.AutoRefresh):
-		if m.refreshEvery <= 0 {
-			return m, nil // no --refresh-interval configured; nothing to toggle
-		}
 		m.autoRefresh = !m.autoRefresh
 		if m.autoRefresh {
 			// Start a fresh tick chain; bumping the sequence kills any tick
@@ -365,6 +364,10 @@ func (m RootModel) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			m.refreshSeq++
 			return m, m.autoRefreshTick()
 		}
+		// Pausing leaves no tick to clear a stale failure marker, and the user
+		// acknowledged the state by pausing — so drop it rather than strand
+		// "⚠ refresh failed  auto 5m paused" for the rest of the session.
+		m.refreshErr = nil
 		return m, nil
 
 	case keyMatches(msg, m.keys.DateWindow):
@@ -502,14 +505,19 @@ func (m RootModel) renderTabs() string {
 		}
 	}
 	bar := lipgloss.JoinHorizontal(lipgloss.Top, tabs...)
-	// Every view shows only cycles inside the --from/--to window, so flag it
-	// globally rather than per view.
-	if from, to := m.svc.DateRange(); !from.IsZero() || !to.IsZero() {
-		bar += dimStyle.Render("  window ") + valueStyle.Render(rangeLabel(from, to))
+	// Markers append most-volatile first, because the bar is truncated from
+	// the right (MaxWidth below) and the tabs plus a full window label already
+	// pass 80 columns. A narrow terminal should lose the standing window the
+	// user set over a failure they haven't seen yet.
+	//
+	// A background pass that failed leaves the last good data on screen, so
+	// this marker is the only sign the numbers quietly stopped moving.
+	if m.refreshErr != nil {
+		bar += errorStyle.Render("  ⚠ refresh failed")
 	}
 	// Auto-refresh re-fetches silently (no loading screen), so show that it's
-	// armed — or paused, and whether its last pass failed — rather than let
-	// the data change (or quietly stop changing) with no visible cause.
+	// armed — or paused — rather than let the data change (or stop changing)
+	// with no visible cause.
 	if m.refreshEvery > 0 {
 		if m.autoRefresh {
 			bar += dimStyle.Render("  auto ") + valueStyle.Render(intervalLabel(m.refreshEvery))
@@ -517,10 +525,15 @@ func (m RootModel) renderTabs() string {
 			bar += dimStyle.Render("  auto " + intervalLabel(m.refreshEvery) + " paused")
 		}
 	}
-	if m.refreshErr != nil {
-		bar += errorStyle.Render("  ⚠ refresh failed")
+	// Every view shows only cycles inside the --from/--to window, so flag it
+	// globally rather than per view.
+	if from, to := m.svc.DateRange(); !from.IsZero() || !to.IsZero() {
+		bar += dimStyle.Render("  window ") + valueStyle.Render(rangeLabel(from, to))
 	}
-	return tabBarStyle.Render(bar)
+	// Cap the bar here rather than let the Bubble Tea renderer cut the line as
+	// a side effect: the truncation belongs next to the ordering it decides.
+	// MaxWidth(0) is a no-op, so this is inert until the first WindowSizeMsg.
+	return tabBarStyle.MaxWidth(m.width).Render(bar)
 }
 
 // intervalLabel formats the auto-refresh interval without the zero units
