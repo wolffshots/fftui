@@ -482,3 +482,21 @@ func TestTemplatesParse(t *testing.T) {
 		t.Fatalf("New with zero options: %v", err)
 	}
 }
+
+// TestDotClassIconOutranksSlug covers the status dot taking its colour from
+// status_description_icon when that icon signals trouble. The TUI dot shares
+// this mapping.
+func TestDotClassIconOutranksSlug(t *testing.T) {
+	for _, tc := range []struct{ slug, icon, want string }{
+		{"trade_processing", "", "pos"},
+		{"trade_processing", "info", "pos"},     // info is the normal case, not an escalation
+		{"trade_processing", "warning", "warn"}, // outranks a healthy slug
+		{"trade_loaded", "error", "neg"},
+		{"", "danger", "neg"},
+		{"", "", "dim"},
+	} {
+		if got := dotClass(tc.slug, tc.icon); got != tc.want {
+			t.Errorf("dotClass(%q, %q) = %q, want %q", tc.slug, tc.icon, got, tc.want)
+		}
+	}
+}

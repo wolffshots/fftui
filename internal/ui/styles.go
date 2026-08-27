@@ -62,11 +62,10 @@ const warnMark = "⚠"
 // The pure formatters live in internal/format; aliased here so ui call sites
 // stay unchanged.
 var (
-	money      = format.Money
-	percent    = format.Percent
-	points     = format.Points
-	spreadFmt  = format.SpreadFmt
-	statusIcon = format.StatusIcon
+	money     = format.Money
+	percent   = format.Percent
+	points    = format.Points
+	spreadFmt = format.SpreadFmt
 )
 
 // colourReturn styles a fractional return green/red by sign.

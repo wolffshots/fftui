@@ -385,10 +385,11 @@ func TestLiveViewRendersData(t *testing.T) {
 			t.Errorf("live view missing %q", want)
 		}
 	}
-	// The status glyph is one or two cells wide depending on the terminal, so
-	// it is separated by a real tab. lipgloss must not expand it to spaces.
-	if !strings.Contains(out, "ℹ\t") {
-		t.Error("status glyph should be followed by a literal tab")
+	// No glyph on the description and no tabs anywhere: the glyph rendered one
+	// or two cells wide depending on the terminal, and the tab that lined it up
+	// skipped cells instead of erasing them, exposing the previous frame.
+	if strings.ContainsAny(out, "ℹ⚠\t") {
+		t.Error("rendered output should carry no status glyph and no tabs")
 	}
 }
 

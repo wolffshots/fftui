@@ -411,7 +411,7 @@ func (s *Server) handleLive(w http.ResponseWriter, r *http.Request) {
 			label = c.Status.Slug
 		}
 		cvm := &liveClientVM{
-			DotClass:       dotClass(c.Status.Slug),
+			DotClass:       dotClass(c.Status.Slug, c.Status.Icon),
 			Label:          label,
 			Description:    c.Status.Description,
 			AmountInvested: c.Status.AmountInvested,
@@ -422,7 +422,6 @@ func (s *Server) handleLive(w http.ResponseWriter, r *http.Request) {
 			AITAvailable:   c.AITAvailable,
 			FundsUpdated:   c.FundsUpdated,
 			FundsWarning:   c.FundsWarning,
-			Icon:           format.StatusIcon(c.Status.Icon),
 			DepositBank:    c.DepositBank,
 		}
 		if c.SDADetail != (model.SDADetail{}) {

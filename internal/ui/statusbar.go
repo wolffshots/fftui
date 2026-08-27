@@ -27,7 +27,7 @@ func renderStatusBar(client *model.ClientStatus, market *model.MarketConditions,
 		if label == "" {
 			label = st.Slug
 		}
-		seg := statusDot(st.Slug) + " " + valueStyle.Render(label)
+		seg := statusDot(st.Slug, st.Icon) + " " + valueStyle.Render(label)
 		if st.AmountInvested > 0 {
 			seg += dimStyle.Render(" · invested ") + valueStyle.Render(money(st.AmountInvested))
 		}
@@ -48,7 +48,15 @@ func renderStatusBar(client *model.ClientStatus, market *model.MarketConditions,
 
 // statusDot colours a ● by the current trade-stage slug: trading (green),
 // loaded/queued (amber), otherwise dim.
-func statusDot(slug string) string {
+func statusDot(slug, icon string) string {
+	// A warning or error icon outranks the slug: it means the state needs
+	// attention whatever stage the cycle is at.
+	switch icon {
+	case "warning":
+		return warnStyle.Render("●")
+	case "error", "danger":
+		return errorStyle.Render("●")
+	}
 	switch slug {
 	case "trade_processing":
 		return positiveStyle.Render("●")

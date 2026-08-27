@@ -127,22 +127,3 @@ func resample(values []float64, width int) []float64 {
 	}
 	return out
 }
-
-// StatusIcon maps the API's status_description_icon to a leading glyph for the
-// status description. Unknown icons render nothing rather than guessing. The
-// glyph is returned bare: these render one or two cells wide depending on the
-// terminal and font, so callers separate it with a tab and let the terminal's
-// own tab stop line the text up.
-func StatusIcon(icon string) string {
-	switch icon {
-	case "info":
-		return "ℹ"
-	case "warning":
-		return "⚠"
-	case "error", "danger":
-		return "✕"
-	case "success", "check":
-		return "✓"
-	}
-	return ""
-}

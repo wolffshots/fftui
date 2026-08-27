@@ -79,7 +79,7 @@ func statusFrom(client *model.ClientStatus, market *model.MarketConditions) *sta
 			label = client.Status.Slug
 		}
 		st.Label = label
-		st.DotClass = dotClass(client.Status.Slug)
+		st.DotClass = dotClass(client.Status.Slug, client.Status.Icon)
 		st.Invested = client.Status.AmountInvested
 		st.Updated = client.FundsUpdated
 	}
@@ -92,7 +92,15 @@ func statusFrom(client *model.ClientStatus, market *model.MarketConditions) *sta
 
 // dotClass replicates ui.statusDot's slug switch as a CSS class: trading
 // (green), loaded/queued (amber), otherwise dim.
-func dotClass(slug string) string {
+func dotClass(slug, icon string) string {
+	// A warning or error icon outranks the slug: it means the state needs
+	// attention whatever stage the cycle is at.
+	switch icon {
+	case "warning":
+		return "warn"
+	case "error", "danger":
+		return "neg"
+	}
 	switch slug {
 	case "trade_processing":
 		return "pos"

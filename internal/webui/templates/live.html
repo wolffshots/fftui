@@ -6,7 +6,7 @@
 {{with .Client}}
 <h2>Current cycle</h2>
 <p><span class="dot {{.DotClass}}">●</span> <span class="val">{{.Label}}</span></p>
-{{if .Description}}<p class="dim">{{with .Icon}}{{.}} {{end}}{{.Description}}</p>{{end}}
+{{if .Description}}<p class="dim">{{.Description}}</p>{{end}}
 <dl class="kv">
   <dt>Amount invested</dt><dd>{{money .AmountInvested}}</dd>
   <dt>Net profit so far</dt>{{if .HasNetProfit}}<dd class="{{signClass .NetProfit}}">{{money .NetProfit}}</dd>{{else}}<dd class="dim">— (still queued)</dd>{{end}}
