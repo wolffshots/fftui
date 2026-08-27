@@ -70,7 +70,7 @@ func (m liveModel) render() string {
 		b.WriteString(titleStyle.Render("Current cycle") + "\n")
 		b.WriteString(statusDot(st.Slug) + " " + valueStyle.Render(label) + "\n")
 		if st.Description != "" {
-			b.WriteString(dimStyle.Render(wrap(st.Description, m.textWidth())) + "\n")
+			b.WriteString(dimStyle.Render(wrap(statusIcon(st.Icon)+st.Description, m.textWidth())) + "\n")
 		}
 		b.WriteString(row("Amount invested", valueStyle.Render(money(st.AmountInvested))) + "\n")
 		if st.NetProfit != nil {
@@ -90,8 +90,10 @@ func (m liveModel) render() string {
 		b.WriteString(row("Offshore price", valueStyle.Render(fmt.Sprintf("%.4f", cur.OffshorePrice))) + "\n")
 		b.WriteString(row("Exchange rate", valueStyle.Render(fmt.Sprintf("%.4f", cur.ExchangeRate))) + "\n")
 
-		if series := m.spreadSeries(); len(series) > 1 {
-			w := m.textWidth()
+		spark := func(title string, series []float64, st lipgloss.Style, f func(float64) string) {
+			if len(series) < 2 {
+				return
+			}
 			min, max := series[0], series[0]
 			for _, v := range series {
 				if v < min {
@@ -101,12 +103,14 @@ func (m liveModel) render() string {
 					max = v
 				}
 			}
-			b.WriteString("\n" + dimStyle.Render(fmt.Sprintf("Spread, last %dd", m.market.Period)) + "\n")
-			b.WriteString(positiveStyle.Render(sparkline(series, w)) + "\n")
-			b.WriteString(dimStyle.Render("  min ") + valueStyle.Render(spreadFmt(min)) +
-				dimStyle.Render("  max ") + valueStyle.Render(spreadFmt(max)) +
-				dimStyle.Render("  latest ") + valueStyle.Render(spreadFmt(series[len(series)-1])) + "\n")
+			b.WriteString("\n" + dimStyle.Render(fmt.Sprintf("%s, last %dd", title, m.market.Period)) + "\n")
+			b.WriteString(st.Render(sparkline(series, m.textWidth())) + "\n")
+			b.WriteString(dimStyle.Render("  min ") + valueStyle.Render(f(min)) +
+				dimStyle.Render("  max ") + valueStyle.Render(f(max)) +
+				dimStyle.Render("  latest ") + valueStyle.Render(f(series[len(series)-1])) + "\n")
 		}
+		spark("Spread", m.spreadSeries(), positiveStyle, spreadFmt)
+		spark("Exchange rate", m.rateSeries(), valueStyle, rateFmt)
 		b.WriteString("\n")
 	}
 
@@ -125,12 +129,19 @@ func (m liveModel) render() string {
 		}
 		b.WriteString(row("AIT available", valueStyle.Render(money(c.AITAvailable))) + "\n")
 		if d := c.AITDetail; d != (model.AITDetail{}) {
-			b.WriteString(row("", dimStyle.Render("available ")+valueStyle.Render(money(d.Available))+
-				dimStyle.Render("  pending ")+valueStyle.Render(money(d.Pending))+
-				dimStyle.Render("  locked ")+valueStyle.Render(money(d.Locked))) + "\n")
+			line := dimStyle.Render("available ") + valueStyle.Render(money(d.Available)) +
+				dimStyle.Render("  pending ") + valueStyle.Render(money(d.Pending))
+			if d.PendingDays > 0 {
+				line += dimStyle.Render(fmt.Sprintf(" (%d working days)", d.PendingDays))
+			}
+			line += dimStyle.Render("  still to apply for ") + valueStyle.Render(money(d.ToApply))
+			b.WriteString(row("", line) + "\n")
 		}
 		if c.FundsUpdated != "" {
 			b.WriteString(dimStyle.Render(c.FundsUpdated) + "\n")
+		}
+		if c.FundsWarning != "" {
+			b.WriteString(warnStyle.Render(wrap(c.FundsWarning, m.textWidth())) + "\n")
 		}
 	}
 
@@ -145,6 +156,21 @@ func (m liveModel) spreadSeries() []float64 {
 	out := make([]float64, len(m.market.History))
 	for i, p := range m.market.History {
 		out[i] = p.Spread
+	}
+	return out
+}
+
+// rateFmt renders an exchange rate at the precision the API reports it.
+func rateFmt(v float64) string { return fmt.Sprintf("%.4f", v) }
+
+// rateSeries extracts the ZAR/USD exchange-rate history for the sparkline.
+func (m liveModel) rateSeries() []float64 {
+	if m.market == nil {
+		return nil
+	}
+	out := make([]float64, len(m.market.History))
+	for i, p := range m.market.History {
+		out[i] = p.ExchangeRate
 	}
 	return out
 }

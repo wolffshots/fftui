@@ -154,16 +154,18 @@ func TestAITAvailableAcceptsBothKeys(t *testing.T) {
 }
 
 // sampleAllowanceDetailsJSON mirrors the allowance_available breakdowns with
-// fictional values, including the object-wrapped "locked" amount.
+// fictional values: the SDA limit splits into unused + reserved + used, and the
+// AIT sub-amounts arrive wrapped in labelled objects.
 const sampleAllowanceDetailsJSON = `{
   "allowance_available": {
     "sda": 640000.0,
-    "sda_details": {"sda_unused": 800000.0, "reserved": 160000.0, "sda_used": 200000.0},
-    "fia": 4200000.0,
+    "sda_details": {"sda_unused": 640000.0, "reserved": 160000.0, "sda_used": 1200000.0, "sda_limit": 2000000},
+    "fia": 5000000.0,
     "fia_details": {
-      "available": 4200000.0,
-      "pending": 250000.0,
-      "locked": {"amount": 3950000.0, "currency": "ZAR"}
+      "available": {"label": "Available", "amount": 250000.0},
+      "pending": {"label": "Pending application(s)", "amount": 0, "application_date": null, "working_days_since_application": null},
+      "locked": {"label": "Still to apply for", "amount": 4750000.0},
+      "fia_limit": 10000000
     }
   }
 }`
@@ -173,12 +175,21 @@ func TestAllowanceDetailsParse(t *testing.T) {
 	if err := json.Unmarshal([]byte(sampleAllowanceDetailsJSON), &r); err != nil {
 		t.Fatalf("unmarshal: %v", err)
 	}
-	if got, want := r.sdaDetail(), (SDADetail{Unused: 800000, Reserved: 160000, Used: 200000}); got != want {
-		t.Errorf("sdaDetail() = %+v, want %+v", got, want)
+	sda := r.sdaDetail()
+	if want := (SDADetail{Unused: 640000, Reserved: 160000, Used: 1200000, Limit: 2000000}); sda != want {
+		t.Errorf("sdaDetail() = %+v, want %+v", sda, want)
 	}
-	// "locked" arrives wrapped in an object; flexFloat unwraps the amount.
-	if got, want := r.aitDetail(), (AITDetail{Available: 4200000, Pending: 250000, Locked: 3950000}); got != want {
-		t.Errorf("aitDetail() = %+v, want %+v", got, want)
+	// The limit accounts for every rand: what is left, held, and spent.
+	if got := sda.Unused + sda.Reserved + sda.Used; got != sda.Limit {
+		t.Errorf("unused+reserved+used = %v, want the limit %v", got, sda.Limit)
+	}
+	// The AIT sub-amounts arrive wrapped; flexFloat unwraps each "amount".
+	ait := r.aitDetail()
+	if want := (AITDetail{Available: 250000, ToApply: 4750000, Limit: 10000000}); ait != want {
+		t.Errorf("aitDetail() = %+v, want %+v", ait, want)
+	}
+	if got := ait.Available + ait.Pending + ait.ToApply; got != float64(r.AllowanceAvailable.FIA) {
+		t.Errorf("available+pending+toapply = %v, want the headline %v", got, float64(r.AllowanceAvailable.FIA))
 	}
 }
 

@@ -244,10 +244,11 @@ data current without anyone pressing refresh.
   headline rate.
 - **Charts** — braille/block sparklines for per-cycle return, monthly annualised
   rate, and cumulative profit.
-- **Live** — the in-progress cycle's status, the live market spread with a
-  history sparkline, and your funds and SDA/AIT balances (live source only).
-  Each allowance also shows the breakdown the API reports beside it: unused,
-  reserved and used for the SDA, available, pending and locked for the AIT.
+- **Live** — the in-progress cycle's status, the live market spread and
+  exchange rate as history sparklines, and your funds and SDA/AIT balances
+  (live source only). Each allowance also shows the breakdown the API reports
+  beside it: unused, reserved and used for the SDA; available, pending (with
+  the working days since the application) and still-to-apply-for for the AIT.
 - **Returns** — what a cycle earns at each capital size at one spread, run
   through the fee waterfall below: gross earnings, third-party
   fees, gross profit, FF's tier share, net profit, net return, and the share of
@@ -385,10 +386,11 @@ Below the variance stats the analytics view shows three planning figures:
   (`--sda-limit`, default R2m — doubled from R1m in the 2026 Budget, effective
   8 April 2026 per SARB Exchange Control Circular 6-2026) plus the AIT
   (`--ait-limit`, default R10m, released by the SARS clearances FF files for you) —
-  R12m/year combined. With the live source, usage comes from the API's actual
-  `SDA available` / `AIT available` balances (which also see in-flight cycles
-  and non-arb transfers) and the strip shows the split; in `--csv` mode it is
-  inferred by summing the year's cycle `ZAR in`s. Either way the strip shows
+  R12m/year combined. With the live source the strip uses Future Forex's own
+  figures instead: its annual caps, its `sda_used`, and the SDA it holds
+  reserved against cycles in flight, which it shows beside the usage. The
+  configured limits then only apply in `--csv` mode, where usage is inferred
+  by summing the year's cycle `ZAR in`s. Either way the strip shows
   usage, remaining, and the projected exhaustion date at the year-to-date pace.
 - **Capital sweet spot** — `(sda+ait) / cycles-per-year` (trailing 365 days):
   the per-cycle capital above which the combined allowance runs out before the

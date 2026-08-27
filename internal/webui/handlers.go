@@ -243,12 +243,7 @@ func (s *Server) handleAnalytics(w http.ResponseWriter, r *http.Request) {
 // planVM mirrors ui/analytics.go renderPlanning, including the live allowance
 // override when a client snapshot is present.
 func (s *Server) planVM(snap *data.Snapshot) *planVM {
-	allow := s.opts.Allow
-	if snap.Client != nil {
-		allow.Live = true
-		allow.SDAAvailable = snap.Client.SDAAvailable
-		allow.AITAvailable = snap.Client.AITAvailable
-	}
+	allow := s.opts.Allow.WithLive(snap.Client)
 	p := analytics.Plan(snap.Cycles, snap.Now, s.opts.Rates, allow, s.opts.Fees)
 
 	vm := &planVM{
@@ -271,6 +266,7 @@ func (s *Server) planVM(snap *data.Snapshot) *planVM {
 		vm.Live = allow.Live
 		vm.SDAAvailable = allow.SDAAvailable
 		vm.AITAvailable = allow.AITAvailable
+		vm.Reserved = p.Reserved
 
 		if p.SweetSpot > 0 {
 			vm.HasSweetSpot = true
@@ -425,6 +421,8 @@ func (s *Server) handleLive(w http.ResponseWriter, r *http.Request) {
 			SDAAvailable:   c.SDAAvailable,
 			AITAvailable:   c.AITAvailable,
 			FundsUpdated:   c.FundsUpdated,
+			FundsWarning:   c.FundsWarning,
+			Icon:           format.StatusIcon(c.Status.Icon),
 		}
 		if c.SDADetail != (model.SDADetail{}) {
 			cvm.SDADetail = &c.SDADetail
@@ -449,20 +447,8 @@ func (s *Server) handleLive(w http.ResponseWriter, r *http.Request) {
 		}
 		if len(mk.History) > 1 {
 			mvm.HasHistory = true
-			series := make([]float64, len(mk.History))
-			min, max := mk.History[0].Spread, mk.History[0].Spread
-			for i, p := range mk.History {
-				series[i] = p.Spread
-				if p.Spread < min {
-					min = p.Spread
-				}
-				if p.Spread > max {
-					max = p.Spread
-				}
-			}
-			mvm.Series = series
-			mvm.Min, mvm.Max = min, max
-			mvm.Latest = series[len(series)-1]
+			mvm.Series, mvm.Min, mvm.Max, mvm.Latest = seriesStats(mk.History, func(p model.MarketPoint) float64 { return p.Spread })
+			mvm.RateSeries, mvm.RateMin, mvm.RateMax, mvm.RateLatest = seriesStats(mk.History, func(p model.MarketPoint) float64 { return p.ExchangeRate })
 		}
 		vm.Market = mvm
 	}
@@ -492,4 +478,22 @@ func refererPath(r *http.Request) string {
 		}
 	}
 	return "/cycles"
+}
+
+// seriesStats pulls one field out of the market history, with its min, max and
+// latest value for the caption under the sparkline.
+func seriesStats(hist []model.MarketPoint, f func(model.MarketPoint) float64) (series []float64, min, max, latest float64) {
+	series = make([]float64, len(hist))
+	min, max = f(hist[0]), f(hist[0])
+	for i, p := range hist {
+		v := f(p)
+		series[i] = v
+		if v < min {
+			min = v
+		}
+		if v > max {
+			max = v
+		}
+	}
+	return series, min, max, series[len(series)-1]
 }

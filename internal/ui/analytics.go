@@ -192,12 +192,7 @@ func (m analyticsModel) renderContent() string {
 // taxable profit, combined SDA+AIT runway for the calendar year, and the
 // marginal value of extra capital (see analytics.Plan).
 func (m analyticsModel) renderPlanning() string {
-	allow := m.allow
-	if m.client != nil {
-		allow.Live = true
-		allow.SDAAvailable = m.client.SDAAvailable
-		allow.AITAvailable = m.client.AITAvailable
-	}
+	allow := m.allow.WithLive(m.client)
 	p := analytics.Plan(m.cycles, m.now, m.rates, allow, m.fees)
 	var lines []string
 
@@ -212,6 +207,9 @@ func (m analyticsModel) renderPlanning() string {
 			labelStyle.Render("used ") + valueStyle.Render(money(p.Used)) +
 			dimStyle.Render(" of "+money(p.TotalLimit)+" ") +
 			valueStyle.Render(percent(p.Used/p.TotalLimit))
+		if p.Reserved > 0 {
+			use += dimStyle.Render("  + reserved ") + valueStyle.Render(money(p.Reserved))
+		}
 		switch {
 		case p.Exhausted:
 			use += warnStyle.Render("  exhausted — no more cycles this calendar year")

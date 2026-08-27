@@ -127,3 +127,19 @@ func resample(values []float64, width int) []float64 {
 	}
 	return out
 }
+
+// StatusIcon maps the API's status_description_icon to a leading glyph for the
+// status description. Unknown icons render nothing rather than guessing.
+func StatusIcon(icon string) string {
+	switch icon {
+	case "info":
+		return "ℹ "
+	case "warning":
+		return "⚠ "
+	case "error", "danger":
+		return "✕ "
+	case "success", "check":
+		return "✓ "
+	}
+	return ""
+}

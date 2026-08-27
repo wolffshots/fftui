@@ -410,8 +410,8 @@ func TestTooltips(t *testing.T) {
 		baseVM: baseVM{Title: "Live", Active: "live"},
 		Client: &liveClientVM{
 			Label:     "idle",
-			SDADetail: &model.SDADetail{Unused: 800000, Reserved: 160000, Used: 200000},
-			AITDetail: &model.AITDetail{Available: 4200000, Pending: 250000, Locked: 3950000},
+			SDADetail: &model.SDADetail{Unused: 640000, Reserved: 160000, Used: 1200000, Limit: 2000000},
+			AITDetail: &model.AITDetail{Available: 250000, ToApply: 4750000, Limit: 10000000, PendingDays: 12},
 		},
 	}
 	if err := s.pages["live"].ExecuteTemplate(&buf, "base.html", vm); err != nil {
@@ -424,7 +424,7 @@ func TestTooltips(t *testing.T) {
 	if !strings.Contains(live, "Single Discretionary Allowance") {
 		t.Error("live page missing the SDA tip text")
 	}
-	for _, want := range []string{"reserved R160,000", "locked R3,950,000"} {
+	for _, want := range []string{"reserved R160,000", "still to apply for R4,750,000", "(12 working days)"} {
 		if !strings.Contains(live, want) {
 			t.Errorf("live page missing allowance breakdown %q", want)
 		}

@@ -381,6 +381,7 @@ type planVM struct {
 	Live         bool
 	SDAAvailable float64
 	AITAvailable float64
+	Reserved     float64
 
 	HasSweetSpot   bool
 	SweetSpot      float64
@@ -457,6 +458,8 @@ type liveClientVM struct {
 	MinimumReturn  float64
 	SDAAvailable   float64
 	AITAvailable   float64
+	FundsWarning   string
+	Icon           string           // glyph for the status description, may be empty
 	SDADetail      *model.SDADetail // nil when the API sent no breakdown
 	AITDetail      *model.AITDetail
 	FundsUpdated   string
@@ -472,5 +475,9 @@ type liveMarketVM struct {
 	Width         int
 	Min, Max      float64
 	Latest        float64
+	RateSeries    []float64
+	RateMin       float64
+	RateMax       float64
+	RateLatest    float64
 	Period        int
 }

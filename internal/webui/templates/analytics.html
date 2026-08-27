@@ -73,6 +73,7 @@
 <div class="prow"><span class="stitle">{{tip "allowance" (printf "allowance %d" .Year)}}</span>
   <span class="dim">used</span> <span class="val">{{money .Used}}</span>
   <span class="dim">of {{money .TotalLimit}}</span> <span class="val">{{percent .UsedFrac}}</span>
+  {{if .Reserved}}<span class="dim">+ reserved</span> <span class="val">{{money .Reserved}}</span>{{end}}
   {{if .Exhausted}}<span class="warn">exhausted — no more cycles this calendar year</span>
   {{else if .HasExhaust}}<span class="dim">≈ exhausts</span> <span class="val">{{.ExhaustDate}}</span> <span class="dim">at the current pace</span>
   {{else}}<span class="dim">lasts the year at the current pace</span>{{end}}</div>

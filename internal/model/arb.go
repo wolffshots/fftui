@@ -21,6 +21,7 @@ type ClientStatus struct {
 	Status         TradeStatus
 	FundsAvailable float64
 	FundsUpdated   string // human string, e.g. "Last updated 15:10 on 18 Jul 2026"
+	FundsWarning   string // the API's own warning about that figure; usually empty
 	TotalProfit    float64
 	MinimumReturn  float64 // fractional (0.1 = 10%)
 	SDAAvailable   float64 // single-discretionary allowance remaining
@@ -29,20 +30,23 @@ type ClientStatus struct {
 	AITDetail      AITDetail
 }
 
-// SDADetail is the sda_details breakdown beside the headline SDA balance:
-// what the year has left, what is held for cycles in flight, and what is spent.
+// SDADetail is the sda_details breakdown. Limit = Unused + Reserved + Used,
+// and Unused is what the headline SDA balance reports.
 type SDADetail struct {
-	Unused   float64 // sda_unused
-	Reserved float64 // reserved
+	Unused   float64 // sda_unused — the headline balance
+	Reserved float64 // held against cycles in flight
 	Used     float64 // sda_used
+	Limit    float64 // sda_limit — the annual cap FF applies
 }
 
-// AITDetail is the fia_details/ait_details breakdown beside the headline AIT
-// balance.
+// AITDetail is the fia_details/ait_details breakdown. Available + Pending +
+// ToApply is the headline AIT balance, and Limit minus that is what is spent.
 type AITDetail struct {
-	Available float64
-	Pending   float64
-	Locked    float64
+	Available   float64 // cleared, ready to send
+	Pending     float64 // sitting in a SARS application
+	ToApply     float64 // "locked" in the API: not yet applied for
+	Limit       float64 // fia_limit
+	PendingDays int     // working days since the pending application was filed
 }
 
 // TradeStatus is the trade_status_v2 object — the current-cycle state the
@@ -79,7 +83,8 @@ type MarketConditions struct {
 type clientResponse struct {
 	FundsAvailable   flexFloat `json:"funds_available"`
 	FundsLastUpdated struct {
-		String string `json:"string"`
+		String  string `json:"string"`
+		Warning string `json:"warning_message"`
 	} `json:"funds_last_updated"`
 	TotalProfit        flexFloat `json:"total_profit"`
 	MinimumReturn      flexFloat `json:"minimum_return"`
@@ -109,9 +114,15 @@ func (r clientResponse) sdaDetail() SDADetail {
 		Unused   flexFloat `json:"sda_unused"`
 		Reserved flexFloat `json:"reserved"`
 		Used     flexFloat `json:"sda_used"`
+		Limit    flexFloat `json:"sda_limit"`
 	}
 	_ = json.Unmarshal(r.AllowanceAvailable.SDADetails, &d)
-	return SDADetail{Unused: float64(d.Unused), Reserved: float64(d.Reserved), Used: float64(d.Used)}
+	return SDADetail{
+		Unused:   float64(d.Unused),
+		Reserved: float64(d.Reserved),
+		Used:     float64(d.Used),
+		Limit:    float64(d.Limit),
+	}
 }
 
 // aitDetail decodes the AIT breakdown, preferring the renamed key, or zeros if
@@ -123,11 +134,21 @@ func (r clientResponse) aitDetail() AITDetail {
 	}
 	var d struct {
 		Available flexFloat `json:"available"`
-		Pending   flexFloat `json:"pending"`
-		Locked    flexFloat `json:"locked"`
+		Pending   struct {
+			Amount flexFloat `json:"amount"`
+			Days   int       `json:"working_days_since_application"`
+		} `json:"pending"`
+		Locked flexFloat `json:"locked"`
+		Limit  flexFloat `json:"fia_limit"`
 	}
 	_ = json.Unmarshal(raw, &d)
-	return AITDetail{Available: float64(d.Available), Pending: float64(d.Pending), Locked: float64(d.Locked)}
+	return AITDetail{
+		Available:   float64(d.Available),
+		Pending:     float64(d.Pending.Amount),
+		ToApply:     float64(d.Locked),
+		Limit:       float64(d.Limit),
+		PendingDays: d.Pending.Days,
+	}
 }
 
 // aitAvailable returns the AIT balance. The API still keys it "fia"; accept
@@ -176,6 +197,7 @@ func (s *LiveSource) FetchClient(ctx context.Context) (*ClientStatus, error) {
 	cs := &ClientStatus{
 		FundsAvailable: float64(r.FundsAvailable),
 		FundsUpdated:   r.FundsLastUpdated.String,
+		FundsWarning:   r.FundsLastUpdated.Warning,
 		TotalProfit:    float64(r.TotalProfit),
 		MinimumReturn:  float64(r.MinimumReturn),
 		SDAAvailable:   float64(r.AllowanceAvailable.SDA),

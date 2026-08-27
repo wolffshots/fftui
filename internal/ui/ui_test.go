@@ -342,6 +342,7 @@ func TestLiveViewRendersData(t *testing.T) {
 			SecondaryText:  "Awaiting market conditions",
 			Description:    "Your funds are currently queued to trade.",
 			AmountInvested: 119422.50,
+			Icon:           "info",
 			NetProfit:      &net,
 		},
 		FundsAvailable: 119422.50,
@@ -350,13 +351,18 @@ func TestLiveViewRendersData(t *testing.T) {
 		MinimumReturn:  0.1,
 		SDAAvailable:   500000,
 		AITAvailable:   4200000,
-		SDADetail:      model.SDADetail{Unused: 800000, Reserved: 160000, Used: 200000},
-		AITDetail:      model.AITDetail{Available: 4200000, Pending: 250000, Locked: 3950000},
+		FundsWarning:   "Funds may be out of date",
+		SDADetail:      model.SDADetail{Unused: 640000, Reserved: 160000, Used: 1200000, Limit: 2000000},
+		AITDetail:      model.AITDetail{Available: 250000, Pending: 0, ToApply: 4750000, Limit: 10000000},
 	}
 	market := &model.MarketConditions{
 		Current: model.MarketPoint{Spread: 0.82, LocalPrice: 16.59, OffshorePrice: 0.999, ExchangeRate: 16.47},
-		History: []model.MarketPoint{{Spread: 0.68}, {Spread: 0.71}, {Spread: 0.82}},
-		Period:  7,
+		History: []model.MarketPoint{
+			{Spread: 0.68, ExchangeRate: 16.40},
+			{Spread: 0.71, ExchangeRate: 16.52},
+			{Spread: 0.82, ExchangeRate: 16.47},
+		},
+		Period: 7,
 	}
 	mm, _ := m.Update(cyclesLoadedMsg{cycles: m.table.all, client: client, market: market})
 	m = mm.(RootModel)
@@ -370,7 +376,9 @@ func TestLiveViewRendersData(t *testing.T) {
 	m = send(m, rune1('5'))
 	out := m.View()
 	for _, want := range []string{"Market conditions", "0.82%", "Funds & allowances", "Minimum return",
-		"reserved", "R160,000", "pending", "locked", "R3,950,000"} {
+		"reserved", "R160,000", "still to apply for", "R4,750,000",
+		"Exchange rate, last 7d", "16.5200", // the rate sparkline caption and its max
+		"ℹ", "Funds may be out of date"} {
 		if !strings.Contains(out, want) {
 			t.Errorf("live view missing %q", want)
 		}

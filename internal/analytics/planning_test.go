@@ -3,6 +3,8 @@ package analytics
 import (
 	"testing"
 	"time"
+
+	"github.com/wolffshots/fftui/internal/model"
 )
 
 func TestTaxYearPeriods(t *testing.T) {
@@ -153,5 +155,48 @@ func TestPlanExhaustedPool(t *testing.T) {
 	}
 	if p.Remaining != 0 {
 		t.Errorf("remaining should clamp to 0, got %f", p.Remaining)
+	}
+}
+
+// TestPlanLiveUsesAPIFigures covers WithLive: FF's own limits, usage and
+// reserved hold replace both the configured caps and the inferred usage. The
+// four figures must still account for every rand of the pool.
+func TestPlanLiveUsesAPIFigures(t *testing.T) {
+	cs := loadCycles(t)
+	client := &model.ClientStatus{
+		SDAAvailable: 640_000,
+		AITAvailable: 5_000_000,
+		SDADetail:    model.SDADetail{Unused: 640_000, Reserved: 160_000, Used: 1_200_000, Limit: 2_000_000},
+		AITDetail:    model.AITDetail{Available: 250_000, ToApply: 4_750_000, Limit: 10_000_000},
+	}
+	p := Plan(cs, refNow, refRates, refAllow.WithLive(client), DefaultFees())
+
+	if !p.Live {
+		t.Error("a client snapshot should mark the plan live")
+	}
+	// sda_used plus the AIT limit minus what is left — not limit-minus-available,
+	// which would swallow the reserved hold as usage.
+	assertClose(t, "used", p.Used, 6_200_000, 0.01)
+	assertClose(t, "reserved", p.Reserved, 160_000, 0.01)
+	assertClose(t, "remaining", p.Remaining, 5_640_000, 0.01)
+	assertClose(t, "total limit", p.TotalLimit, 12_000_000, 0.01)
+	assertClose(t, "used+reserved+remaining", p.Used+p.Reserved+p.Remaining, p.TotalLimit, 0.01)
+}
+
+// TestWithLiveKeepsConfiguredLimitsWhenAbsent guards the fallback: an older
+// snapshot with no breakdown must not zero the configured caps.
+func TestWithLiveKeepsConfiguredLimitsWhenAbsent(t *testing.T) {
+	a := refAllow.WithLive(&model.ClientStatus{SDAAvailable: 500_000, AITAvailable: 4_000_000})
+	if a.SDALimit != 2_000_000 || a.AITLimit != 10_000_000 {
+		t.Errorf("limits = %v/%v, want the configured 2m/10m", a.SDALimit, a.AITLimit)
+	}
+	p := Plan(loadCycles(t), refNow, refRates, a, DefaultFees())
+	assertClose(t, "used falls back to limit minus remaining", p.Used, 7_500_000, 0.01)
+	if p.Reserved != 0 {
+		t.Errorf("reserved = %v, want 0 without a breakdown", p.Reserved)
+	}
+	// A nil snapshot leaves CSV-mode inference alone.
+	if refAllow.WithLive(nil).Live {
+		t.Error("a nil snapshot should not mark the allowances live")
 	}
 }

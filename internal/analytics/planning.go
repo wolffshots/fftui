@@ -21,6 +21,31 @@ type Allowances struct {
 	Live         bool
 	SDAAvailable float64
 	AITAvailable float64
+	// Usage straight from the API, which knows about the reserved hold and
+	// any non-arb transfers the cycle history cannot see.
+	SDAUsed     float64
+	SDAReserved float64
+	AITUsed     float64
+}
+
+// WithLive folds a live client snapshot into the configured allowances: FF's
+// own caps, usage and reserved hold replace the configured figures. A nil
+// snapshot leaves them untouched, so CSV mode keeps inferring from cycles.
+func (a Allowances) WithLive(c *model.ClientStatus) Allowances {
+	if c == nil {
+		return a
+	}
+	a.Live = true
+	a.SDAAvailable, a.AITAvailable = c.SDAAvailable, c.AITAvailable
+	a.SDAUsed, a.SDAReserved = c.SDADetail.Used, c.SDADetail.Reserved
+	if l := c.SDADetail.Limit; l > 0 {
+		a.SDALimit = l
+	}
+	if l := c.AITDetail.Limit; l > 0 {
+		a.AITLimit = l
+		a.AITUsed = l - c.AITAvailable
+	}
+	return a
 }
 
 // Total is the combined annual allowance pool.
@@ -45,6 +70,7 @@ type Planning struct {
 	TotalLimit  float64
 	Used        float64
 	Remaining   float64
+	Reserved    float64 // live only: SDA held against cycles in flight, neither used nor available
 	Live        bool
 	Exhausted   bool
 	ExhaustDate time.Time // projected exhaustion at the year-to-date pace
@@ -132,7 +158,12 @@ func Plan(cs []model.Cycle, now time.Time, r Rates, a Allowances, fees Fees) Pla
 		year := now.Year()
 		if a.Live {
 			p.Remaining = a.SDAAvailable + a.AITAvailable
-			p.Used = p.TotalLimit - p.Remaining
+			p.Reserved = a.SDAReserved
+			if used := a.SDAUsed + a.AITUsed; used > 0 {
+				p.Used = used // FF's own figure, which excludes the reserved hold
+			} else {
+				p.Used = p.TotalLimit - p.Remaining
+			}
 		} else {
 			for _, c := range cs {
 				if c.StartDate.Year() == year && !c.StartDate.After(now) {
