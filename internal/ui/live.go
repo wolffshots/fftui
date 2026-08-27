@@ -118,7 +118,7 @@ func (m liveModel) render() string {
 		b.WriteString(row("Total profit to date", colourMoney(c.TotalProfit)) + "\n")
 		b.WriteString(row("Minimum return", valueStyle.Render(percent(c.MinimumReturn))) + "\n")
 		b.WriteString(row("SDA available", valueStyle.Render(money(c.SDAAvailable))) + "\n")
-		b.WriteString(row("FIA available", valueStyle.Render(money(c.FIAAvailable))) + "\n")
+		b.WriteString(row("AIT available", valueStyle.Render(money(c.AITAvailable))) + "\n")
 		if c.FundsUpdated != "" {
 			b.WriteString(dimStyle.Render(c.FundsUpdated) + "\n")
 		}

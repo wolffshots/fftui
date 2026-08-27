@@ -8,22 +8,23 @@ import (
 
 // Allowances configures the annual exchange-control caps the arb capital
 // cycles through. Future Forex trades against the COMBINED capacity — they
-// file the FIA/AIT applications and prioritise operating on FIA, falling back
-// to the clearance-free SDA — so planning treats SDA+FIA as one annual pool.
+// file the AIT applications and prioritise operating on the AIT allowance,
+// falling back to the clearance-free SDA — so planning treats SDA+AIT as one
+// annual pool.
 // When Live is true the API's actual remaining balances are used instead of
 // inferring usage from the cycle history (the API also sees in-flight cycles
 // and non-arb transfers).
 type Allowances struct {
 	SDALimit float64
-	FIALimit float64
+	AITLimit float64
 
 	Live         bool
 	SDAAvailable float64
-	FIAAvailable float64
+	AITAvailable float64
 }
 
 // Total is the combined annual allowance pool.
-func (a Allowances) Total() float64 { return a.SDALimit + a.FIALimit }
+func (a Allowances) Total() float64 { return a.SDALimit + a.AITLimit }
 
 // Planning bundles the fiscal / capital-planning figures shown at the bottom
 // of the analytics view: taxable profit in the current SA tax year, combined
@@ -37,7 +38,7 @@ type Planning struct {
 	TaxYearProfit float64
 	EstimatedTax  float64
 
-	// Combined SDA+FIA runway for the current CALENDAR year: every cycle sends
+	// Combined SDA+AIT runway for the current CALENDAR year: every cycle sends
 	// its ZarIn offshore afresh, so each consumes that much allowance again.
 	// Used/Remaining come from the live balances when available, otherwise
 	// from summing the year's cycle ZarIns against the configured limits.
@@ -130,7 +131,7 @@ func Plan(cs []model.Cycle, now time.Time, r Rates, a Allowances, fees Fees) Pla
 	if p.TotalLimit > 0 {
 		year := now.Year()
 		if a.Live {
-			p.Remaining = a.SDAAvailable + a.FIAAvailable
+			p.Remaining = a.SDAAvailable + a.AITAvailable
 			p.Used = p.TotalLimit - p.Remaining
 		} else {
 			for _, c := range cs {

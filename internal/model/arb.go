@@ -24,7 +24,7 @@ type ClientStatus struct {
 	TotalProfit    float64
 	MinimumReturn  float64 // fractional (0.1 = 10%)
 	SDAAvailable   float64 // single-discretionary allowance remaining
-	FIAAvailable   float64 // foreign-investment allowance remaining
+	AITAvailable   float64 // approval-for-international-transfer allowance remaining (ex-FIA)
 }
 
 // TradeStatus is the trade_status_v2 object — the current-cycle state the
@@ -67,7 +67,8 @@ type clientResponse struct {
 	MinimumReturn      flexFloat `json:"minimum_return"`
 	AllowanceAvailable struct {
 		SDA flexFloat `json:"sda"`
-		FIA flexFloat `json:"fia"`
+		FIA flexFloat `json:"fia"` // legacy key for the AIT balance
+		AIT flexFloat `json:"ait"`
 	} `json:"allowance_available"`
 	TradeStatus struct {
 		Slug           string     `json:"status_slug"`
@@ -77,6 +78,15 @@ type clientResponse struct {
 		AmountInvested flexFloat  `json:"amount_invested"`
 		NetProfit      *flexFloat `json:"net_profit"`
 	} `json:"trade_status_v2"`
+}
+
+// aitAvailable returns the AIT balance. The API still keys it "fia"; accept
+// the renamed "ait" key too in case it follows SARS.
+func (r clientResponse) aitAvailable() float64 {
+	if r.AllowanceAvailable.AIT != 0 {
+		return float64(r.AllowanceAvailable.AIT)
+	}
+	return float64(r.AllowanceAvailable.FIA)
 }
 
 type marketPointJSON struct {
@@ -119,7 +129,7 @@ func (s *LiveSource) FetchClient(ctx context.Context) (*ClientStatus, error) {
 		TotalProfit:    float64(r.TotalProfit),
 		MinimumReturn:  float64(r.MinimumReturn),
 		SDAAvailable:   float64(r.AllowanceAvailable.SDA),
-		FIAAvailable:   float64(r.AllowanceAvailable.FIA),
+		AITAvailable:   r.aitAvailable(),
 		Status: TradeStatus{
 			Slug:           r.TradeStatus.Slug,
 			SecondaryText:  r.TradeStatus.SecondaryText,

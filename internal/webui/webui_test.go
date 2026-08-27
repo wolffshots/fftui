@@ -25,7 +25,7 @@ func testOptions(token string) Options {
 		Version: "test",
 		CSVMode: true,
 		Rates:   analytics.Rates{Idle: 0.06, Tax: 0.41},
-		Allow:   analytics.Allowances{SDALimit: 2_000_000, FIALimit: 10_000_000},
+		Allow:   analytics.Allowances{SDALimit: 2_000_000, AITLimit: 10_000_000},
 		Fees:    analytics.DefaultFees(),
 	}
 }
@@ -194,7 +194,7 @@ func TestAnalytics(t *testing.T) {
 	if !strings.Contains(deadBody, "incl. dead buckets") {
 		t.Error("dead=1 should flip the scope label")
 	}
-	// CSV mode: the planning strip shows the inferred-usage note, not live SDA/FIA.
+	// CSV mode: the planning strip shows the inferred-usage note, not live SDA/AIT.
 	if !strings.Contains(body, "usage inferred from cycle history") {
 		t.Error("CSV-mode planning strip should show the inferred-usage note")
 	}

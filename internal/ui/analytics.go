@@ -189,14 +189,14 @@ func (m analyticsModel) renderContent() string {
 }
 
 // renderPlanning renders the fiscal / capital-planning strip: current-tax-year
-// taxable profit, combined SDA+FIA runway for the calendar year, and the
+// taxable profit, combined SDA+AIT runway for the calendar year, and the
 // marginal value of extra capital (see analytics.Plan).
 func (m analyticsModel) renderPlanning() string {
 	allow := m.allow
 	if m.client != nil {
 		allow.Live = true
 		allow.SDAAvailable = m.client.SDAAvailable
-		allow.FIAAvailable = m.client.FIAAvailable
+		allow.AITAvailable = m.client.AITAvailable
 	}
 	p := analytics.Plan(m.cycles, m.now, m.rates, allow, m.fees)
 	var lines []string
@@ -227,11 +227,11 @@ func (m analyticsModel) renderPlanning() string {
 			lines = append(lines, titleStyle.Render(pad("", 22))+
 				labelStyle.Render("SDA left ")+valueStyle.Render(money(allow.SDAAvailable))+
 				dimStyle.Render(" · ")+
-				labelStyle.Render("FIA left ")+valueStyle.Render(money(allow.FIAAvailable))+
-				dimStyle.Render("  (live · FIA via FF's AIT filings)"))
+				labelStyle.Render("AIT left ")+valueStyle.Render(money(allow.AITAvailable))+
+				dimStyle.Render("  (live · AIT clearances FF files for you)"))
 		} else {
 			lines = append(lines, titleStyle.Render(pad("", 22))+
-				dimStyle.Render("usage inferred from cycle history — live SDA/FIA split needs the live source"))
+				dimStyle.Render("usage inferred from cycle history — live SDA/AIT split needs the live source"))
 		}
 
 		if p.SweetSpot > 0 {

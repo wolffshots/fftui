@@ -108,7 +108,7 @@ type RootModel struct {
 
 // New builds the root model. rates carries the idle-cash rate and tax rate used
 // for the with-idle and after-tax annualised figures; allow carries the annual
-// SDA/FIA limits for the planning figures (a zero total disables them); fees is
+// SDA/AIT limits for the planning figures (a zero total disables them); fees is
 // the per-cycle fee schedule for the fee-aware capital projections;
 // refreshEvery re-fetches automatically on that interval (0 disables it, R
 // pauses/resumes it for the session).

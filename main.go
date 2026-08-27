@@ -41,7 +41,7 @@ func main() {
 	idlePct := flag.Float64("idle-rate", envFloat("FF_IDLE_RATE", 6.0), "annual % earned on idle cash (non-trading days); tracks the reserve bank rate")
 	taxPct := flag.Float64("tax-rate", envFloat("FF_TAX_RATE", 41.0), "marginal tax % applied to returns for the effective (net) figure")
 	sdaLimit := flag.Float64("sda-limit", envFloat("FF_SDA_LIMIT", 2_000_000), "annual Single Discretionary Allowance in rand (R2m since 8 Apr 2026)")
-	fiaLimit := flag.Float64("fia-limit", envFloat("FF_FIA_LIMIT", 10_000_000), "annual Foreign Investment Allowance in rand (AIT-cleared); SDA+FIA form the planning pool, both 0 hides it")
+	aitLimit := flag.Float64("ait-limit", envFloat("FF_AIT_LIMIT", envFloat("FF_FIA_LIMIT", 10_000_000)), "annual Approval for International Transfer allowance in rand (ex-FIA); SDA+AIT form the planning pool, both 0 hides it")
 	defFees := analytics.DefaultFees()
 	feeFixed := flag.Float64("fee-fixed", envFloat("FF_FEE_FIXED", defFees.Fixed), "fixed third-party fees per cycle in rand (bank admin + EFT)")
 	feeVarPct := flag.Float64("fee-variable", envFloat("FF_FEE_VARIABLE", defFees.Variable*100), "variable third-party fees per cycle as % of capital (exchange + offshore fees)")
@@ -143,7 +143,7 @@ func main() {
 	// Flags are percentages; analytics wants fractions.
 	rates := analytics.Rates{Idle: *idlePct / 100, Tax: *taxPct / 100}
 
-	allow := analytics.Allowances{SDALimit: *sdaLimit, FIALimit: *fiaLimit}
+	allow := analytics.Allowances{SDALimit: *sdaLimit, AITLimit: *aitLimit}
 	fees := analytics.Fees{Fixed: *feeFixed, Variable: *feeVarPct / 100, Tiers: defFees.Tiers}
 	if *feeTiers != "" {
 		tiers, err := parseFeeTiers(*feeTiers)

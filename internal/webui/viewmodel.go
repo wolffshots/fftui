@@ -380,7 +380,7 @@ type planVM struct {
 	ExhaustDate  string
 	Live         bool
 	SDAAvailable float64
-	FIAAvailable float64
+	AITAvailable float64
 
 	HasSweetSpot   bool
 	SweetSpot      float64
@@ -456,7 +456,7 @@ type liveClientVM struct {
 	TotalProfit    float64
 	MinimumReturn  float64
 	SDAAvailable   float64
-	FIAAvailable   float64
+	AITAvailable   float64
 	FundsUpdated   string
 }
 

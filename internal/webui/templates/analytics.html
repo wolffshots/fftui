@@ -79,11 +79,11 @@
 {{if .Live}}
 <div class="prow"><span class="stitle"></span>
   <span class="dim">{{tip "sda" "SDA left"}}</span> <span class="val">{{money .SDAAvailable}}</span>
-  <span class="dim">·</span> <span class="dim">{{tip "fia" "FIA left"}}</span> <span class="val">{{money .FIAAvailable}}</span>
-  <span class="dim">(live · FIA via FF's AIT filings)</span></div>
+  <span class="dim">·</span> <span class="dim">{{tip "ait" "AIT left"}}</span> <span class="val">{{money .AITAvailable}}</span>
+  <span class="dim">(live · AIT clearances FF files for you)</span></div>
 {{else}}
 <div class="prow"><span class="stitle"></span>
-  <span class="dim">usage inferred from cycle history — live SDA/FIA split needs the live source</span></div>
+  <span class="dim">usage inferred from cycle history — live SDA/AIT split needs the live source</span></div>
 {{end}}
 {{if .HasSweetSpot}}
 <div class="prow"><span class="stitle">{{tip "sweet-spot" "capital sweet spot"}}</span>

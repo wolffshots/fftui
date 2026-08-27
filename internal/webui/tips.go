@@ -55,7 +55,7 @@ var tips = map[string]string{
 		"to end February): a cycle's whole profit lands in the tax year its " +
 		"end date falls in. The estimate applies the configured marginal " +
 		"rate to that profit.",
-	"allowance": "The combined SDA+FIA exchange-control pool for the " +
+	"allowance": "The combined SDA+AIT exchange-control pool for the " +
 		"calendar year. Each cycle sends its capital offshore afresh, so " +
 		"every cycle consumes that much allowance again; without the live " +
 		"API, usage is inferred by summing the year's cycle capital.",
@@ -63,11 +63,11 @@ var tips = map[string]string{
 		"exchange-control allowance usable without a tax-clearance " +
 		"application. Every cycle sends its capital offshore afresh, so " +
 		"each cycle consumes allowance again.",
-	"fia": "Foreign Investment Allowance — the larger annual " +
-		"exchange-control allowance, requiring a SARS tax-clearance (AIT) " +
-		"application that Future Forex files. Planning treats SDA and FIA " +
-		"as one combined annual pool.",
-	"sweet-spot": "The combined annual SDA+FIA allowance divided by the " +
+	"ait": "Approval for International Transfer — the larger annual " +
+		"exchange-control allowance, formerly the FIA. A SARS tax-clearance " +
+		"application, which Future Forex files for you, releases it. " +
+		"Planning treats SDA and AIT as one combined annual pool.",
+	"sweet-spot": "The combined annual SDA+AIT allowance divided by the " +
 		"trailing year's cycle count — the per-cycle capital above which " +
 		"the allowance pool runs out before the year does, so additional " +
 		"capital can no longer be fully re-deployed each cycle.",

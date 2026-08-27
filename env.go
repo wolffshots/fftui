@@ -126,11 +126,11 @@ const configTemplate = `# fftui user config. KEY=VALUE, read literally (no $ exp
 # Default 41. (--tax-rate flag overrides.)
 # FF_TAX_RATE=41
 
-# Annual exchange-control allowances in rand; SDA+FIA form the planning pool
+# Annual exchange-control allowances in rand; SDA+AIT form the planning pool
 # shown on the analytics tab (both 0 hides it). Defaults R2m / R10m.
-# (--sda-limit / --fia-limit flags override.)
+# (--sda-limit / --ait-limit flags override.)
 # FF_SDA_LIMIT=2000000
-# FF_FIA_LIMIT=10000000
+# FF_AIT_LIMIT=10000000
 
 # Per-cycle fee model for the fee-aware capital projections. Fixed is rand per
 # cycle; variable is % of cycle capital; tiers are "capital:percent,..." where

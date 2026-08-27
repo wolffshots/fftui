@@ -37,8 +37,8 @@ func TestTaxYearBucketsReferenceData(t *testing.T) {
 	}
 }
 
-// refAllow is the standard combined pool: R2m SDA + R10m FIA.
-var refAllow = Allowances{SDALimit: 2_000_000, FIALimit: 10_000_000}
+// refAllow is the standard combined pool: R2m SDA + R10m AIT.
+var refAllow = Allowances{SDALimit: 2_000_000, AITLimit: 10_000_000}
 
 func TestPlanReferenceData(t *testing.T) {
 	cs := loadCycles(t)
@@ -95,14 +95,14 @@ func TestPlanReferenceData(t *testing.T) {
 	assertClose(t, "extra-100k net", p.Extra100kNet, p.Extra100kGross*(1-0.41), 1e-9)
 }
 
-// TestPlanLiveBalances: with live SDA/FIA balances the usage comes from the
+// TestPlanLiveBalances: with live SDA/AIT balances the usage comes from the
 // API figures (which also see in-flight cycles), not the cycle-history sum.
 func TestPlanLiveBalances(t *testing.T) {
 	cs := loadCycles(t)
 	a := refAllow
 	a.Live = true
 	a.SDAAvailable = 1_644_450.00
-	a.FIAAvailable = 7_145_861.97
+	a.AITAvailable = 7_145_861.97
 	p := Plan(cs, refNow, refRates, a, DefaultFees())
 	assertClose(t, "live used", p.Used, 3_209_688.03, 0.01)
 	assertClose(t, "live remaining", p.Remaining, 8_790_311.97, 0.01)

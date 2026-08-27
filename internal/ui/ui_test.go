@@ -27,7 +27,7 @@ func testModelAuto(t *testing.T, every time.Duration) RootModel {
 	}
 	now := time.Date(2026, 7, 10, 0, 0, 0, 0, time.UTC)
 	m := New(data.NewService(src), now, analytics.Rates{Idle: 0.06, Tax: 0.41},
-		analytics.Allowances{SDALimit: 2_000_000, FIALimit: 10_000_000}, analytics.DefaultFees(), every)
+		analytics.Allowances{SDALimit: 2_000_000, AITLimit: 10_000_000}, analytics.DefaultFees(), every)
 	// Simulate the async load + a terminal size.
 	mm, _ := m.Update(cyclesLoadedMsg{cycles: cs})
 	m = mm.(RootModel)
@@ -147,7 +147,7 @@ func TestDateWindowInteractive(t *testing.T) {
 	}
 	now := time.Date(2026, 7, 10, 0, 0, 0, 0, time.UTC)
 	m := New(svc, now, analytics.Rates{Idle: 0.06, Tax: 0.41},
-		analytics.Allowances{SDALimit: 2_000_000, FIALimit: 10_000_000}, analytics.DefaultFees(), 0)
+		analytics.Allowances{SDALimit: 2_000_000, AITLimit: 10_000_000}, analytics.DefaultFees(), 0)
 	m = send(m, cyclesLoadedMsg{cycles: snap.Cycles, now: snap.Now})
 	m = send(m, tea.WindowSizeMsg{Width: 120, Height: 40})
 
@@ -288,10 +288,10 @@ func TestAnalyticsPlanningStrip(t *testing.T) {
 			t.Errorf("planning strip missing %q", want)
 		}
 	}
-	// With a live snapshot the strip shows the actual SDA/FIA balances instead.
-	m.analytics.client = &model.ClientStatus{SDAAvailable: 1_644_450, FIAAvailable: 7_145_861.97}
+	// With a live snapshot the strip shows the actual SDA/AIT balances instead.
+	m.analytics.client = &model.ClientStatus{SDAAvailable: 1_644_450, AITAvailable: 7_145_861.97}
 	out = m.analytics.renderContent()
-	for _, want := range []string{"SDA left", "FIA left"} {
+	for _, want := range []string{"SDA left", "AIT left"} {
 		if !strings.Contains(out, want) {
 			t.Errorf("live planning strip missing %q", want)
 		}
@@ -349,7 +349,7 @@ func TestLiveViewRendersData(t *testing.T) {
 		TotalProfit:    19422.50,
 		MinimumReturn:  0.1,
 		SDAAvailable:   500000,
-		FIAAvailable:   4200000,
+		AITAvailable:   4200000,
 	}
 	market := &model.MarketConditions{
 		Current: model.MarketPoint{Spread: 0.82, LocalPrice: 16.59, OffshorePrice: 0.999, ExchangeRate: 16.47},

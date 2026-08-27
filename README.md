@@ -162,7 +162,7 @@ FF_PASSWORD_CMD=op read op://Personal/FutureForex/password
 | `FF_IDLE_RATE` | `6` | idle-cash rate (% p.a.); also `--idle-rate` |
 | `FF_TAX_RATE` | `41` | marginal tax rate (%) on returns; also `--tax-rate` |
 | `FF_SDA_LIMIT` | `2000000` | annual Single Discretionary Allowance in rand; also `--sda-limit` |
-| `FF_FIA_LIMIT` | `10000000` | annual Foreign Investment Allowance in rand; also `--fia-limit`. SDA+FIA form the planning pool; both `0` hides it |
+| `FF_AIT_LIMIT` | `10000000` | annual Approval for International Transfer allowance in rand (ex-FIA, `FF_FIA_LIMIT` still read); also `--ait-limit`. SDA+AIT form the planning pool; both `0` hides it |
 | `FF_FEE_FIXED` | `530` | fixed third-party fees per cycle in rand; also `--fee-fixed` |
 | `FF_FEE_VARIABLE` | `0.23` | variable third-party fees as % of cycle capital; also `--fee-variable` |
 | `FF_FEE_TIERS` | built-in | FF success-fee tiers as `capital:percent,...`; also `--fee-tiers` |
@@ -245,7 +245,7 @@ data current without anyone pressing refresh.
 - **Charts** — braille/block sparklines for per-cycle return, monthly annualised
   rate, and cumulative profit.
 - **Live** — the in-progress cycle's status, the live market spread with a
-  history sparkline, and your funds and SDA/FIA balances (live source only).
+  history sparkline, and your funds and SDA/AIT balances (live source only).
 - **Returns** — what a cycle earns at each capital size at one spread, run
   through the fee waterfall below: gross earnings, third-party
   fees, gross profit, FF's tier share, net profit, net return, and the share of
@@ -381,19 +381,19 @@ Below the variance stats the analytics view shows three planning figures:
   each consumes that much annual exchange-control allowance again. Future
   Forex trades against the **combined pool** — the clearance-free SDA
   (`--sda-limit`, default R2m — doubled from R1m in the 2026 Budget, effective
-  8 April 2026 per SARB Exchange Control Circular 6-2026) plus the FIA
-  (`--fia-limit`, default R10m, on the AIT clearances FF files for you) —
+  8 April 2026 per SARB Exchange Control Circular 6-2026) plus the AIT
+  (`--ait-limit`, default R10m, released by the SARS clearances FF files for you) —
   R12m/year combined. With the live source, usage comes from the API's actual
-  `SDA available` / `FIA available` balances (which also see in-flight cycles
+  `SDA available` / `AIT available` balances (which also see in-flight cycles
   and non-arb transfers) and the strip shows the split; in `--csv` mode it is
   inferred by summing the year's cycle `ZAR in`s. Either way the strip shows
   usage, remaining, and the projected exhaustion date at the year-to-date pace.
-- **Capital sweet spot** — `(sda+fia) / cycles-per-year` (trailing 365 days):
+- **Capital sweet spot** — `(sda+ait) / cycles-per-year` (trailing 365 days):
   the per-cycle capital above which the combined allowance runs out before the
   year does. Below it, an extra rand compounds through every cycle (≈ avg
   return × cycles/yr per year, gross); above it, extra capital only ever earns
   the idle rate, because the allowance — not capital — is the binding
-  constraint on annual profit (`max gross ≈ avg return × (sda+fia)`).
+  constraint on annual profit (`max gross ≈ avg return × (sda+ait)`).
 
 ### Fee model (fee ladder and capital projections)
 

@@ -247,7 +247,7 @@ func (s *Server) planVM(snap *data.Snapshot) *planVM {
 	if snap.Client != nil {
 		allow.Live = true
 		allow.SDAAvailable = snap.Client.SDAAvailable
-		allow.FIAAvailable = snap.Client.FIAAvailable
+		allow.AITAvailable = snap.Client.AITAvailable
 	}
 	p := analytics.Plan(snap.Cycles, snap.Now, s.opts.Rates, allow, s.opts.Fees)
 
@@ -270,7 +270,7 @@ func (s *Server) planVM(snap *data.Snapshot) *planVM {
 		}
 		vm.Live = allow.Live
 		vm.SDAAvailable = allow.SDAAvailable
-		vm.FIAAvailable = allow.FIAAvailable
+		vm.AITAvailable = allow.AITAvailable
 
 		if p.SweetSpot > 0 {
 			vm.HasSweetSpot = true
@@ -423,7 +423,7 @@ func (s *Server) handleLive(w http.ResponseWriter, r *http.Request) {
 			TotalProfit:    c.TotalProfit,
 			MinimumReturn:  c.MinimumReturn,
 			SDAAvailable:   c.SDAAvailable,
-			FIAAvailable:   c.FIAAvailable,
+			AITAvailable:   c.AITAvailable,
 			FundsUpdated:   c.FundsUpdated,
 		}
 		if c.Status.NetProfit != nil {

@@ -130,3 +130,25 @@ func TestParseClientIDs(t *testing.T) {
 		})
 	}
 }
+
+// TestAITAvailableAcceptsBothKeys covers the SARS rename: the API keys the
+// balance "fia" today, but "ait" wins if it ever switches.
+func TestAITAvailableAcceptsBothKeys(t *testing.T) {
+	for _, tc := range []struct {
+		name string
+		raw  string
+		want float64
+	}{
+		{"legacy fia", `{"allowance_available": {"sda": 1.0, "fia": 4200000.0}}`, 4200000},
+		{"renamed ait", `{"allowance_available": {"sda": 1.0, "ait": 5762847.80}}`, 5762847.80},
+		{"both", `{"allowance_available": {"sda": 1.0, "fia": 1.0, "ait": 4200000.0}}`, 4200000},
+	} {
+		var r clientResponse
+		if err := json.Unmarshal([]byte(tc.raw), &r); err != nil {
+			t.Fatalf("%s: unmarshal: %v", tc.name, err)
+		}
+		if got := r.aitAvailable(); math.Abs(got-tc.want) > 0.001 {
+			t.Errorf("%s: aitAvailable() = %v, want %v", tc.name, got, tc.want)
+		}
+	}
+}
