@@ -118,7 +118,17 @@ func (m liveModel) render() string {
 		b.WriteString(row("Total profit to date", colourMoney(c.TotalProfit)) + "\n")
 		b.WriteString(row("Minimum return", valueStyle.Render(percent(c.MinimumReturn))) + "\n")
 		b.WriteString(row("SDA available", valueStyle.Render(money(c.SDAAvailable))) + "\n")
+		if d := c.SDADetail; d != (model.SDADetail{}) {
+			b.WriteString(row("", dimStyle.Render("unused ")+valueStyle.Render(money(d.Unused))+
+				dimStyle.Render("  reserved ")+valueStyle.Render(money(d.Reserved))+
+				dimStyle.Render("  used ")+valueStyle.Render(money(d.Used))) + "\n")
+		}
 		b.WriteString(row("AIT available", valueStyle.Render(money(c.AITAvailable))) + "\n")
+		if d := c.AITDetail; d != (model.AITDetail{}) {
+			b.WriteString(row("", dimStyle.Render("available ")+valueStyle.Render(money(d.Available))+
+				dimStyle.Render("  pending ")+valueStyle.Render(money(d.Pending))+
+				dimStyle.Render("  locked ")+valueStyle.Render(money(d.Locked))) + "\n")
+		}
 		if c.FundsUpdated != "" {
 			b.WriteString(dimStyle.Render(c.FundsUpdated) + "\n")
 		}

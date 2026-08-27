@@ -408,7 +408,11 @@ func TestTooltips(t *testing.T) {
 	var buf bytes.Buffer
 	vm := liveVM{
 		baseVM: baseVM{Title: "Live", Active: "live"},
-		Client: &liveClientVM{Label: "idle"},
+		Client: &liveClientVM{
+			Label:     "idle",
+			SDADetail: &model.SDADetail{Unused: 800000, Reserved: 160000, Used: 200000},
+			AITDetail: &model.AITDetail{Available: 4200000, Pending: 250000, Locked: 3950000},
+		},
 	}
 	if err := s.pages["live"].ExecuteTemplate(&buf, "base.html", vm); err != nil {
 		t.Fatalf("render live: %v", err)
@@ -419,6 +423,11 @@ func TestTooltips(t *testing.T) {
 	}
 	if !strings.Contains(live, "Single Discretionary Allowance") {
 		t.Error("live page missing the SDA tip text")
+	}
+	for _, want := range []string{"reserved R160,000", "locked R3,950,000"} {
+		if !strings.Contains(live, want) {
+			t.Errorf("live page missing allowance breakdown %q", want)
+		}
 	}
 }
 

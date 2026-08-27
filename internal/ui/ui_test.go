@@ -350,6 +350,8 @@ func TestLiveViewRendersData(t *testing.T) {
 		MinimumReturn:  0.1,
 		SDAAvailable:   500000,
 		AITAvailable:   4200000,
+		SDADetail:      model.SDADetail{Unused: 800000, Reserved: 160000, Used: 200000},
+		AITDetail:      model.AITDetail{Available: 4200000, Pending: 250000, Locked: 3950000},
 	}
 	market := &model.MarketConditions{
 		Current: model.MarketPoint{Spread: 0.82, LocalPrice: 16.59, OffshorePrice: 0.999, ExchangeRate: 16.47},
@@ -367,7 +369,8 @@ func TestLiveViewRendersData(t *testing.T) {
 	// Live view shows the spread and funds sections.
 	m = send(m, rune1('5'))
 	out := m.View()
-	for _, want := range []string{"Market conditions", "0.82%", "Funds & allowances", "Minimum return"} {
+	for _, want := range []string{"Market conditions", "0.82%", "Funds & allowances", "Minimum return",
+		"reserved", "R160,000", "pending", "locked", "R3,950,000"} {
 		if !strings.Contains(out, want) {
 			t.Errorf("live view missing %q", want)
 		}

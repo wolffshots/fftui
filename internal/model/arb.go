@@ -25,6 +25,24 @@ type ClientStatus struct {
 	MinimumReturn  float64 // fractional (0.1 = 10%)
 	SDAAvailable   float64 // single-discretionary allowance remaining
 	AITAvailable   float64 // approval-for-international-transfer allowance remaining (ex-FIA)
+	SDADetail      SDADetail
+	AITDetail      AITDetail
+}
+
+// SDADetail is the sda_details breakdown beside the headline SDA balance:
+// what the year has left, what is held for cycles in flight, and what is spent.
+type SDADetail struct {
+	Unused   float64 // sda_unused
+	Reserved float64 // reserved
+	Used     float64 // sda_used
+}
+
+// AITDetail is the fia_details/ait_details breakdown beside the headline AIT
+// balance.
+type AITDetail struct {
+	Available float64
+	Pending   float64
+	Locked    float64
 }
 
 // TradeStatus is the trade_status_v2 object — the current-cycle state the
@@ -69,6 +87,11 @@ type clientResponse struct {
 		SDA flexFloat `json:"sda"`
 		FIA flexFloat `json:"fia"` // legacy key for the AIT balance
 		AIT flexFloat `json:"ait"`
+		// The breakdowns are held raw and decoded separately so an unexpected
+		// shape degrades to zeros instead of failing the whole snapshot.
+		SDADetails json.RawMessage `json:"sda_details"`
+		FIADetails json.RawMessage `json:"fia_details"` // legacy key
+		AITDetails json.RawMessage `json:"ait_details"`
 	} `json:"allowance_available"`
 	TradeStatus struct {
 		Slug           string     `json:"status_slug"`
@@ -78,6 +101,33 @@ type clientResponse struct {
 		AmountInvested flexFloat  `json:"amount_invested"`
 		NetProfit      *flexFloat `json:"net_profit"`
 	} `json:"trade_status_v2"`
+}
+
+// sdaDetail decodes the sda_details breakdown, or zeros if it is absent.
+func (r clientResponse) sdaDetail() SDADetail {
+	var d struct {
+		Unused   flexFloat `json:"sda_unused"`
+		Reserved flexFloat `json:"reserved"`
+		Used     flexFloat `json:"sda_used"`
+	}
+	_ = json.Unmarshal(r.AllowanceAvailable.SDADetails, &d)
+	return SDADetail{Unused: float64(d.Unused), Reserved: float64(d.Reserved), Used: float64(d.Used)}
+}
+
+// aitDetail decodes the AIT breakdown, preferring the renamed key, or zeros if
+// neither is present.
+func (r clientResponse) aitDetail() AITDetail {
+	raw := r.AllowanceAvailable.AITDetails
+	if len(raw) == 0 {
+		raw = r.AllowanceAvailable.FIADetails
+	}
+	var d struct {
+		Available flexFloat `json:"available"`
+		Pending   flexFloat `json:"pending"`
+		Locked    flexFloat `json:"locked"`
+	}
+	_ = json.Unmarshal(raw, &d)
+	return AITDetail{Available: float64(d.Available), Pending: float64(d.Pending), Locked: float64(d.Locked)}
 }
 
 // aitAvailable returns the AIT balance. The API still keys it "fia"; accept
@@ -130,6 +180,8 @@ func (s *LiveSource) FetchClient(ctx context.Context) (*ClientStatus, error) {
 		MinimumReturn:  float64(r.MinimumReturn),
 		SDAAvailable:   float64(r.AllowanceAvailable.SDA),
 		AITAvailable:   r.aitAvailable(),
+		SDADetail:      r.sdaDetail(),
+		AITDetail:      r.aitDetail(),
 		Status: TradeStatus{
 			Slug:           r.TradeStatus.Slug,
 			SecondaryText:  r.TradeStatus.SecondaryText,

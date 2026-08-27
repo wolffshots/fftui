@@ -32,8 +32,8 @@
   <dt>Funds available</dt><dd>{{money .FundsAvailable}}</dd>
   <dt>Total profit to date</dt><dd class="{{signClass .TotalProfit}}">{{money .TotalProfit}}</dd>
   <dt>{{tip "min-return" "Minimum return"}}</dt><dd>{{percent .MinimumReturn}}</dd>
-  <dt>{{tip "sda" "SDA available"}}</dt><dd>{{money .SDAAvailable}}</dd>
-  <dt>{{tip "ait" "AIT available"}}</dt><dd>{{money .AITAvailable}}</dd>
+  <dt>{{tip "sda" "SDA available"}}</dt><dd>{{money .SDAAvailable}}{{with .SDADetail}}<span class="dim"> unused {{money .Unused}} · reserved {{money .Reserved}} · used {{money .Used}}</span>{{end}}</dd>
+  <dt>{{tip "ait" "AIT available"}}</dt><dd>{{money .AITAvailable}}{{with .AITDetail}}<span class="dim"> available {{money .Available}} · pending {{money .Pending}} · locked {{money .Locked}}</span>{{end}}</dd>
 </dl>
 {{if .FundsUpdated}}<p class="dim">{{.FundsUpdated}}</p>{{end}}
 {{end}}

@@ -246,6 +246,8 @@ data current without anyone pressing refresh.
   rate, and cumulative profit.
 - **Live** — the in-progress cycle's status, the live market spread with a
   history sparkline, and your funds and SDA/AIT balances (live source only).
+  Each allowance also shows the breakdown the API reports beside it: unused,
+  reserved and used for the SDA, available, pending and locked for the AIT.
 - **Returns** — what a cycle earns at each capital size at one spread, run
   through the fee waterfall below: gross earnings, third-party
   fees, gross profit, FF's tier share, net profit, net return, and the share of

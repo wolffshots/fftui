@@ -457,6 +457,8 @@ type liveClientVM struct {
 	MinimumReturn  float64
 	SDAAvailable   float64
 	AITAvailable   float64
+	SDADetail      *model.SDADetail // nil when the API sent no breakdown
+	AITDetail      *model.AITDetail
 	FundsUpdated   string
 }
 

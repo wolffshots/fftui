@@ -363,10 +363,21 @@ func authHeader(token string) string {
 	return "Token " + token
 }
 
-// flexFloat unmarshals a JSON number that may be encoded as a string.
+// flexFloat unmarshals a JSON number that may be encoded as a string, or
+// wrapped in an object under "amount" (the allowance breakdowns do that).
 type flexFloat float64
 
 func (f *flexFloat) UnmarshalJSON(b []byte) error {
+	if len(b) > 0 && b[0] == '{' {
+		var o struct {
+			Amount flexFloat `json:"amount"`
+		}
+		if err := json.Unmarshal(b, &o); err != nil {
+			return err
+		}
+		*f = o.Amount
+		return nil
+	}
 	s := strings.Trim(string(b), `"`)
 	if s == "" || s == "null" {
 		*f = 0

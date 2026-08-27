@@ -152,3 +152,53 @@ func TestAITAvailableAcceptsBothKeys(t *testing.T) {
 		}
 	}
 }
+
+// sampleAllowanceDetailsJSON mirrors the allowance_available breakdowns with
+// fictional values, including the object-wrapped "locked" amount.
+const sampleAllowanceDetailsJSON = `{
+  "allowance_available": {
+    "sda": 640000.0,
+    "sda_details": {"sda_unused": 800000.0, "reserved": 160000.0, "sda_used": 200000.0},
+    "fia": 4200000.0,
+    "fia_details": {
+      "available": 4200000.0,
+      "pending": 250000.0,
+      "locked": {"amount": 3950000.0, "currency": "ZAR"}
+    }
+  }
+}`
+
+func TestAllowanceDetailsParse(t *testing.T) {
+	var r clientResponse
+	if err := json.Unmarshal([]byte(sampleAllowanceDetailsJSON), &r); err != nil {
+		t.Fatalf("unmarshal: %v", err)
+	}
+	if got, want := r.sdaDetail(), (SDADetail{Unused: 800000, Reserved: 160000, Used: 200000}); got != want {
+		t.Errorf("sdaDetail() = %+v, want %+v", got, want)
+	}
+	// "locked" arrives wrapped in an object; flexFloat unwraps the amount.
+	if got, want := r.aitDetail(), (AITDetail{Available: 4200000, Pending: 250000, Locked: 3950000}); got != want {
+		t.Errorf("aitDetail() = %+v, want %+v", got, want)
+	}
+}
+
+// TestAllowanceDetailsAbsentOrOdd guards the degrade-to-zeros path: a snapshot
+// without breakdowns, and one whose shape the app does not expect, must still
+// parse rather than failing the whole client fetch.
+func TestAllowanceDetailsAbsentOrOdd(t *testing.T) {
+	for _, raw := range []string{
+		sampleClientJSON,
+		`{"allowance_available": {"sda": 1.0, "sda_details": [], "fia_details": {"pending": [1,2]}}}`,
+	} {
+		var r clientResponse
+		if err := json.Unmarshal([]byte(raw), &r); err != nil {
+			t.Fatalf("unmarshal: %v", err)
+		}
+		if got := r.sdaDetail(); got != (SDADetail{}) {
+			t.Errorf("sdaDetail() = %+v, want zero", got)
+		}
+		if got := r.aitDetail(); got != (AITDetail{}) {
+			t.Errorf("aitDetail() = %+v, want zero", got)
+		}
+	}
+}

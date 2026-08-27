@@ -426,6 +426,12 @@ func (s *Server) handleLive(w http.ResponseWriter, r *http.Request) {
 			AITAvailable:   c.AITAvailable,
 			FundsUpdated:   c.FundsUpdated,
 		}
+		if c.SDADetail != (model.SDADetail{}) {
+			cvm.SDADetail = &c.SDADetail
+		}
+		if c.AITDetail != (model.AITDetail{}) {
+			cvm.AITDetail = &c.AITDetail
+		}
 		if c.Status.NetProfit != nil {
 			cvm.HasNetProfit = true
 			cvm.NetProfit = *c.Status.NetProfit
