@@ -213,3 +213,24 @@ func TestAllowanceDetailsAbsentOrOdd(t *testing.T) {
 		}
 	}
 }
+
+// TestDepositBankParses covers the top-up account fields, with fictional
+// values. A null deposit_bank must leave the struct empty, not fail the decode.
+func TestDepositBankParses(t *testing.T) {
+	const raw = `{"deposit_bank":{"id":1,"bank":"Example Bank Business","deposit_account_number":"1234567890","branch_code":"000000","account_type":"cheque","cif":"0000000"}}`
+	var r clientResponse
+	if err := json.Unmarshal([]byte(raw), &r); err != nil {
+		t.Fatalf("unmarshal: %v", err)
+	}
+	if r.DepositBank.Account != "1234567890" || r.DepositBank.Branch != "000000" ||
+		r.DepositBank.Bank != "Example Bank Business" || r.DepositBank.Type != "cheque" {
+		t.Errorf("deposit bank = %+v", r.DepositBank)
+	}
+	var empty clientResponse
+	if err := json.Unmarshal([]byte(`{"deposit_bank":null}`), &empty); err != nil {
+		t.Fatalf("null deposit_bank: %v", err)
+	}
+	if empty.DepositBank.Account != "" {
+		t.Errorf("null deposit_bank should leave the account empty, got %q", empty.DepositBank.Account)
+	}
+}

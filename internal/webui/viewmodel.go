@@ -459,7 +459,8 @@ type liveClientVM struct {
 	SDAAvailable   float64
 	AITAvailable   float64
 	FundsWarning   string
-	Icon           string           // glyph for the status description, may be empty
+	Icon           string // glyph for the status description, may be empty
+	DepositBank    model.DepositBank
 	SDADetail      *model.SDADetail // nil when the API sent no breakdown
 	AITDetail      *model.AITDetail
 	FundsUpdated   string

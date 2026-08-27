@@ -28,6 +28,15 @@ type ClientStatus struct {
 	AITAvailable   float64 // approval-for-international-transfer allowance remaining (ex-FIA)
 	SDADetail      SDADetail
 	AITDetail      AITDetail
+	DepositBank    DepositBank
+}
+
+// DepositBank is the account to pay into when topping up trading capital.
+type DepositBank struct {
+	Bank    string // e.g. "Example Bank Business"
+	Account string // deposit_account_number
+	Branch  string // branch_code
+	Type    string // account_type, e.g. "cheque"
 }
 
 // SDADetail is the sda_details breakdown. Limit = Unused + Reserved + Used,
@@ -98,6 +107,12 @@ type clientResponse struct {
 		FIADetails json.RawMessage `json:"fia_details"` // legacy key
 		AITDetails json.RawMessage `json:"ait_details"`
 	} `json:"allowance_available"`
+	DepositBank struct {
+		Bank    string `json:"bank"`
+		Account string `json:"deposit_account_number"`
+		Branch  string `json:"branch_code"`
+		Type    string `json:"account_type"`
+	} `json:"deposit_bank"`
 	TradeStatus struct {
 		Slug           string     `json:"status_slug"`
 		SecondaryText  string     `json:"status_secondary_text"`
@@ -204,6 +219,12 @@ func (s *LiveSource) FetchClient(ctx context.Context) (*ClientStatus, error) {
 		AITAvailable:   r.aitAvailable(),
 		SDADetail:      r.sdaDetail(),
 		AITDetail:      r.aitDetail(),
+		DepositBank: DepositBank{
+			Bank:    r.DepositBank.Bank,
+			Account: r.DepositBank.Account,
+			Branch:  r.DepositBank.Branch,
+			Type:    r.DepositBank.Type,
+		},
 		Status: TradeStatus{
 			Slug:           r.TradeStatus.Slug,
 			SecondaryText:  r.TradeStatus.SecondaryText,

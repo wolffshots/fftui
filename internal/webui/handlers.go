@@ -423,6 +423,7 @@ func (s *Server) handleLive(w http.ResponseWriter, r *http.Request) {
 			FundsUpdated:   c.FundsUpdated,
 			FundsWarning:   c.FundsWarning,
 			Icon:           format.StatusIcon(c.Status.Icon),
+			DepositBank:    c.DepositBank,
 		}
 		if c.SDADetail != (model.SDADetail{}) {
 			cvm.SDADetail = &c.SDADetail

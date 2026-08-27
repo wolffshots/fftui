@@ -6,7 +6,7 @@
 {{with .Client}}
 <h2>Current cycle</h2>
 <p><span class="dot {{.DotClass}}">●</span> <span class="val">{{.Label}}</span></p>
-{{if .Description}}<p class="dim">{{.Icon}}{{.Description}}</p>{{end}}
+{{if .Description}}<p class="dim">{{with .Icon}}{{.}} {{end}}{{.Description}}</p>{{end}}
 <dl class="kv">
   <dt>Amount invested</dt><dd>{{money .AmountInvested}}</dd>
   <dt>Net profit so far</dt>{{if .HasNetProfit}}<dd class="{{signClass .NetProfit}}">{{money .NetProfit}}</dd>{{else}}<dd class="dim">— (still queued)</dd>{{end}}
@@ -33,6 +33,7 @@
 <h2>Funds &amp; allowances</h2>
 <dl class="kv">
   <dt>Funds available</dt><dd>{{money .FundsAvailable}}</dd>
+  {{with .DepositBank}}{{if .Account}}<dt>Deposit account</dt><dd>{{.Account}} <span class="dim">{{.Bank}}{{if .Branch}} · branch {{.Branch}}{{end}}{{if .Type}} · {{.Type}}{{end}}</span></dd>{{end}}{{end}}
   <dt>Total profit to date</dt><dd class="{{signClass .TotalProfit}}">{{money .TotalProfit}}</dd>
   <dt>{{tip "min-return" "Minimum return"}}</dt><dd>{{percent .MinimumReturn}}</dd>
   <dt>{{tip "sda" "SDA available"}}</dt><dd>{{money .SDAAvailable}}{{with .SDADetail}}<span class="dim"> unused {{money .Unused}} · reserved {{money .Reserved}} · used {{money .Used}}</span>{{end}}</dd>

@@ -352,6 +352,7 @@ func TestLiveViewRendersData(t *testing.T) {
 		SDAAvailable:   500000,
 		AITAvailable:   4200000,
 		FundsWarning:   "Funds may be out of date",
+		DepositBank:    model.DepositBank{Bank: "Example Bank Business", Account: "1234567890", Branch: "000000", Type: "cheque"},
 		SDADetail:      model.SDADetail{Unused: 640000, Reserved: 160000, Used: 1200000, Limit: 2000000},
 		AITDetail:      model.AITDetail{Available: 250000, Pending: 0, ToApply: 4750000, Limit: 10000000},
 	}
@@ -378,10 +379,16 @@ func TestLiveViewRendersData(t *testing.T) {
 	for _, want := range []string{"Market conditions", "0.82%", "Funds & allowances", "Minimum return",
 		"reserved", "R160,000", "still to apply for", "R4,750,000",
 		"Exchange rate, last 7d", "16.5200", // the rate sparkline caption and its max
-		"ℹ", "Funds may be out of date"} {
+		"Funds may be out of date",
+		"Deposit account", "1234567890", "Example Bank Business", "branch 000000"} {
 		if !strings.Contains(out, want) {
 			t.Errorf("live view missing %q", want)
 		}
+	}
+	// The status glyph is one or two cells wide depending on the terminal, so
+	// it is separated by a real tab. lipgloss must not expand it to spaces.
+	if !strings.Contains(out, "ℹ\t") {
+		t.Error("status glyph should be followed by a literal tab")
 	}
 }
 

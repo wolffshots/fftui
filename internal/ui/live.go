@@ -70,7 +70,13 @@ func (m liveModel) render() string {
 		b.WriteString(titleStyle.Render("Current cycle") + "\n")
 		b.WriteString(statusDot(st.Slug) + " " + valueStyle.Render(label) + "\n")
 		if st.Description != "" {
-			b.WriteString(dimStyle.Render(wrap(statusIcon(st.Icon)+st.Description, m.textWidth())) + "\n")
+			// Separate the glyph with a tab: it renders one or two cells wide
+			// depending on the terminal and font, and only the terminal's own
+			// tab stop can start the text at the same column either way.
+			if g := statusIcon(st.Icon); g != "" {
+				b.WriteString(dimStyle.Render(g) + tabSentinel)
+			}
+			b.WriteString(dimStyle.Render(wrap(st.Description, m.textWidth())) + "\n")
 		}
 		b.WriteString(row("Amount invested", valueStyle.Render(money(st.AmountInvested))) + "\n")
 		if st.NetProfit != nil {
@@ -119,6 +125,16 @@ func (m liveModel) render() string {
 		c := m.client
 		b.WriteString(titleStyle.Render("Funds & allowances") + "\n")
 		b.WriteString(row("Funds available", valueStyle.Render(money(c.FundsAvailable))) + "\n")
+		if d := c.DepositBank; d.Account != "" {
+			line := valueStyle.Render(d.Account) + dimStyle.Render("  "+d.Bank)
+			if d.Branch != "" {
+				line += dimStyle.Render("  branch " + d.Branch)
+			}
+			if d.Type != "" {
+				line += dimStyle.Render("  " + d.Type)
+			}
+			b.WriteString(row("Deposit account", line) + "\n")
+		}
 		b.WriteString(row("Total profit to date", colourMoney(c.TotalProfit)) + "\n")
 		b.WriteString(row("Minimum return", valueStyle.Render(percent(c.MinimumReturn))) + "\n")
 		b.WriteString(row("SDA available", valueStyle.Render(money(c.SDAAvailable))) + "\n")
@@ -145,7 +161,7 @@ func (m liveModel) render() string {
 		}
 	}
 
-	return lipgloss.NewStyle().Padding(0, 1).Render(b.String())
+	return lipgloss.NewStyle().Padding(0, 1).TabWidth(lipgloss.NoTabConversion).Render(b.String())
 }
 
 // spreadSeries extracts the spread history for the sparkline.
@@ -191,3 +207,8 @@ func (m liveModel) textWidth() int {
 func wrap(s string, width int) string {
 	return lipgloss.NewStyle().Width(width).Render(s)
 }
+
+// tabSentinel stands in for a tab inside rendered content. lipgloss replaces
+// tabs with spaces on every Render, including the one the viewport does
+// internally, so RootModel.View swaps this back for a real tab at the end.
+const tabSentinel = "\x00"

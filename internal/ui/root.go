@@ -507,7 +507,10 @@ func (m RootModel) View() string {
 		}
 	}
 
-	return lipgloss.JoinVertical(lipgloss.Left, top, body, bottom)
+	// Restore real tabs last: lipgloss expands them to spaces on every Render,
+	// and the viewport renders its content through one, so a tab written into a
+	// view would never survive to the terminal.
+	return strings.ReplaceAll(lipgloss.JoinVertical(lipgloss.Left, top, body, bottom), tabSentinel, "\t")
 }
 
 func (m RootModel) renderTabs() string {
