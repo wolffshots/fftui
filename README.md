@@ -18,6 +18,20 @@ Builds from source (Go is installed as a build-only dependency) via
 works on Intel and Apple silicon Macs and on Linux, with no Gatekeeper
 quarantine step.
 
+The tap tracks the latest tag — **v0.13.0** at the time of writing. Upgrade an
+existing install with:
+
+```sh
+brew update && brew upgrade fftui
+```
+
+v0.13.0 dates the fixed per-cycle fee. Capitec cuts the SWIFT/admin fee from
+R500 to R350 on **1 October 2026**, so a cycle that starts on or after that
+date is modelled at R380 (admin R350 + instant EFT R30) instead of R530. Cycles
+that started earlier keep the R530 they were billed, so their gross and spread
+columns still match the statements. See [Fee model](#fee-model-fee-ladder-and-capital-projections)
+for the full waterfall.
+
 ### Prebuilt binaries
 
 Download the binary for your platform from the [latest release](https://github.com/wolffshots/fftui/releases/latest):
