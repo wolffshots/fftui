@@ -160,7 +160,7 @@ func (m *tableModel) rebuild() {
 			// Gross earnings over capital — the effective spread the cycle
 			// caught, modelled from the fee waterfall since the export only
 			// carries net figures.
-			rightPad(percent(m.fees.Spread(c.NetProfit, c.ZarIn)), 7),
+			rightPad(percent(m.fees.At(c.StartDate).Spread(c.NetProfit, c.ZarIn)), 7),
 			rightPad(strconv.Itoa(c.HoldDays()), 4),
 		}
 	}

@@ -1,5 +1,7 @@
 package analytics
 
+import "time"
+
 // Fees models the per-cycle fee waterfall shown on the Future Forex cycle
 // statements:
 //
@@ -14,10 +16,24 @@ package analytics
 // cycle statements; the tier table is Future Forex's published schedule (only
 // the 35% and 30% tiers are corroborated by statements, the rest are as
 // published). Everything is configurable via flags because FF can revise it.
+//
+// The fixed fee is dated: Capitec cut the SWIFT/admin fee on AdminCutDate, so
+// callers must pick the schedule in force with At() before projecting a cycle
+// or backing a spread out of one.
 type Fees struct {
-	Fixed    float64   // rand per cycle (default R530: admin R500 + EFT R30)
-	Variable float64   // fraction of capital per cycle (default 0.0023)
-	Tiers    []FeeTier // ascending Min; FF's share of gross profit
+	Fixed      float64   // rand per cycle before FixedFrom (default R530: admin R500 + EFT R30)
+	FixedFrom  time.Time // date FixedAfter takes over; zero means Fixed always applies
+	FixedAfter float64   // rand per cycle from FixedFrom onward (default R380: admin R350 + EFT R30)
+	Variable   float64   // fraction of capital per cycle (default 0.0023)
+	Tiers      []FeeTier // ascending Min; FF's share of gross profit
+}
+
+// At returns the schedule in force on date t — for a cycle, its start date.
+func (f Fees) At(t time.Time) Fees {
+	if !f.FixedFrom.IsZero() && !t.Before(f.FixedFrom) {
+		f.Fixed = f.FixedAfter
+	}
+	return f
 }
 
 // FeeTier applies Rate to gross profit for cycles with capital >= Min (until
@@ -27,11 +43,21 @@ type FeeTier struct {
 	Rate float64
 }
 
-// DefaultFees returns the fee schedule as of mid-2026.
+// EFTFee is the instant-EFT half of the fixed fee; the rest is the bank's
+// SWIFT/admin fee, which Capitec cut from R500 to R350 on AdminCutDate.
+const EFTFee = 30.0
+
+// AdminCutDate is the first day the reduced admin fee applies.
+var AdminCutDate = time.Date(2026, 10, 1, 0, 0, 0, 0, time.UTC)
+
+// DefaultFees returns the fee schedule as of mid-2026, including the dated
+// admin-fee cut announced for 1 October 2026.
 func DefaultFees() Fees {
 	return Fees{
-		Fixed:    530,
-		Variable: 0.0023,
+		Fixed:      500 + EFTFee,
+		FixedFrom:  AdminCutDate,
+		FixedAfter: 350 + EFTFee,
+		Variable:   0.0023,
 		Tiers: []FeeTier{
 			{100_000, 0.35},
 			{150_000, 0.33},

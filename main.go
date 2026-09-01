@@ -145,6 +145,11 @@ func main() {
 
 	allow := analytics.Allowances{SDALimit: *sdaLimit, AITLimit: *aitLimit}
 	fees := analytics.Fees{Fixed: *feeFixed, Variable: *feeVarPct / 100, Tiers: defFees.Tiers}
+	if *feeFixed == defFees.Fixed {
+		// Not overridden: keep the dated Capitec admin-fee cut. An override is
+		// taken as one flat fee for every cycle.
+		fees.FixedFrom, fees.FixedAfter = defFees.FixedFrom, defFees.FixedAfter
+	}
 	if *feeTiers != "" {
 		tiers, err := parseFeeTiers(*feeTiers)
 		if err != nil {

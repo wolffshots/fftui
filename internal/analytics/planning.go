@@ -111,7 +111,7 @@ func AvgSpread(cs []model.Cycle, now time.Time, fees Fees) (float64, int) {
 	var n int
 	for _, c := range cs {
 		if c.StartDate.After(cutoff) && !c.StartDate.After(now) {
-			sum += fees.Spread(c.NetProfit, c.ZarIn)
+			sum += fees.At(c.StartDate).Spread(c.NetProfit, c.ZarIn)
 			n++
 		}
 	}
@@ -193,7 +193,9 @@ func Plan(cs []model.Cycle, now time.Time, r Rates, a Allowances, fees Fees) Pla
 		}
 	}
 
-	// Fee-aware capital projections.
+	// Fee-aware capital projections. These model the NEXT cycle, so they use
+	// the fee schedule in force today, not the one the trailing cycles paid.
+	fees = fees.At(now)
 	if p.CyclesPerYear > 0 && p.CurrentCapital > 0 {
 		p.CurrentTier = fees.TierRate(p.CurrentCapital)
 		if n := len(fees.Tiers); n > 0 {

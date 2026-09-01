@@ -163,7 +163,7 @@ FF_PASSWORD_CMD=op read op://Personal/FutureForex/password
 | `FF_TAX_RATE` | `41` | marginal tax rate (%) on returns; also `--tax-rate` |
 | `FF_SDA_LIMIT` | `2000000` | annual Single Discretionary Allowance in rand; also `--sda-limit` |
 | `FF_AIT_LIMIT` | `10000000` | annual Approval for International Transfer allowance in rand (ex-FIA, `FF_FIA_LIMIT` still read); also `--ait-limit`. SDA+AIT form the planning pool; both `0` hides it |
-| `FF_FEE_FIXED` | `530` | fixed third-party fees per cycle in rand; also `--fee-fixed` |
+| `FF_FEE_FIXED` | `530`, `380` from 1 Oct 2026 | fixed third-party fees per cycle in rand; also `--fee-fixed`. Setting it pins one flat fee for every cycle |
 | `FF_FEE_VARIABLE` | `0.23` | variable third-party fees as % of cycle capital; also `--fee-variable` |
 | `FF_FEE_TIERS` | built-in | FF success-fee tiers as `capital:percent,...`; also `--fee-tiers` |
 
@@ -407,7 +407,9 @@ waterfall (verified to the cent against real cycle statements) is:
 
 ```
 gross earnings  = capital × market spread        # from live trade rates
-− third-party   = fixed rand (bank admin R500 + instant EFT R30 = R530)
+− third-party   = fixed rand (bank admin R500 + instant EFT R30 = R530;
+                    admin falls to R350 for cycles starting 1 Oct 2026,
+                    so R380)
                 + variable × capital (bank exchange + offshore fees ≈ 0.23%)
 = gross profit
 − FF success fee = gross profit × tier(capital)  # 35% ≥R100k · 33% ≥R150k ·
@@ -417,7 +419,11 @@ gross earnings  = capital × market spread        # from live trade rates
 
 FF's share is a cut of **gross profit** — what is left after the third-party
 fees — never of the earnings or the capital, and a losing cycle pays no success
-fee. The waterfall was checked against four real cycle statements and matched
+fee. The fixed fee is keyed on the cycle **start date**, so historic cycles
+keep the R530 they were billed and their gross/spread columns still invert
+correctly, while the Returns ladder and the planning projections switch to
+R380 on 1 October 2026. The waterfall was checked against four real cycle
+statements and matched
 them to the cent; across them the variable third-party fees ran 0.228%–0.235%
 of capital, so a modelled net profit is good to about ±1%. The regression tests
 use synthetic cycles in those bands.

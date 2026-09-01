@@ -135,6 +135,9 @@ const configTemplate = `# fftui user config. KEY=VALUE, read literally (no $ exp
 # Per-cycle fee model for the fee-aware capital projections. Fixed is rand per
 # cycle; variable is % of cycle capital; tiers are "capital:percent,..." where
 # percent is FF's share of gross profit from that capital upward.
+# The built-in fixed fee is dated: R530 up to 30 Sep 2026, R380 from 1 Oct 2026
+# (Capitec cut the admin fee from R500 to R350). Setting FF_FEE_FIXED replaces
+# both with one flat fee for every cycle.
 # (--fee-fixed / --fee-variable / --fee-tiers flags override.)
 # FF_FEE_FIXED=530
 # FF_FEE_VARIABLE=0.23

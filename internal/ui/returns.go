@@ -256,9 +256,10 @@ func (m returnsModel) render() string {
 			rightPad("You keep", wKeep))
 	b.WriteString(header + "\n")
 
+	fees := m.fees.At(m.now)
 	capitals, now := m.capitals()
 	for _, capital := range capitals {
-		p := m.fees.Project(spread, capital)
+		p := fees.Project(spread, capital)
 		// "You keep" is the share of the gross EARNINGS that survives both the
 		// third-party fees and FF's cut. A losing cycle keeps nothing to split.
 		keep := "—"
@@ -289,7 +290,7 @@ func (m returnsModel) render() string {
 // renderFeeModel spells out every constituent part of the fee figures above, in
 // statement order, so the net column can be checked by hand.
 func (m returnsModel) renderFeeModel(spread float64) string {
-	f := m.fees
+	f := m.fees.At(m.now)
 	row := func(label, val, note string) string {
 		return labelStyle.Render(pad(label, 24)) + valueStyle.Render(pad(val, 28)) + dimStyle.Render(note)
 	}
@@ -301,8 +302,13 @@ func (m returnsModel) renderFeeModel(spread float64) string {
 		"the market spread FF trades into"))
 
 	fixedNote := "bank admin + instant EFT"
-	if f.Fixed == analytics.DefaultFees().Fixed {
-		fixedNote = "Capitec admin R500.00 + instant EFT R30.00"
+	if f.Fixed == analytics.DefaultFees().At(m.now).Fixed {
+		fixedNote = "Capitec admin " + money(f.Fixed-analytics.EFTFee) +
+			" + instant EFT " + money(analytics.EFTFee)
+	}
+	// Flag a dated cut before it lands, so the ladder is not silently stale.
+	if !f.FixedFrom.IsZero() && f.FixedFrom.After(m.now) {
+		fixedNote += " — falls to " + money(f.FixedAfter) + " on " + f.FixedFrom.Format("2 Jan 2006")
 	}
 	lines = append(lines, row("− third-party fixed", money(f.Fixed), fixedNote))
 	lines = append(lines, row("− third-party variable", percent(f.Variable)+" of capital",

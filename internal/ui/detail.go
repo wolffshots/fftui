@@ -92,10 +92,11 @@ func (m detailModel) render() string {
 	// The export only carries net figures; the gross lines are backed out of the
 	// fee waterfall, so they match the cycle statement only while the configured
 	// fee schedule matches the one FF billed.
-	gross := m.fees.GrossProfit(c.NetProfit, c.ZarIn)
-	b.WriteString(row("Gross earnings (spread)", percent(m.fees.Spread(c.NetProfit, c.ZarIn))) + "\n")
+	f := m.fees.At(c.StartDate)
+	gross := f.GrossProfit(c.NetProfit, c.ZarIn)
+	b.WriteString(row("Gross earnings (spread)", percent(f.Spread(c.NetProfit, c.ZarIn))) + "\n")
 	b.WriteString(row("Gross profit", colourMoney(gross)+
-		dimStyle.Render("  "+percent(m.fees.GrossReturn(c.NetProfit, c.ZarIn)))) + "\n")
+		dimStyle.Render("  "+percent(f.GrossReturn(c.NetProfit, c.ZarIn)))) + "\n")
 	b.WriteString(row("Net profit", colourMoney(c.NetProfit)) + "\n")
 	b.WriteString(row("Return", colourReturn(c.Return())) + "\n")
 	b.WriteString(dimStyle.Render("gross figures are modelled from the fee schedule, not reported by the\n"+

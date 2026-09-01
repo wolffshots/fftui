@@ -57,7 +57,7 @@ func (s *Server) handleCycles(w http.ResponseWriter, r *http.Request) {
 			ZarOut: c.ZarOut,
 			Profit: c.NetProfit,
 			Return: c.Return(),
-			Spread: s.opts.Fees.Spread(c.NetProfit, c.ZarIn),
+			Spread: s.opts.Fees.At(c.StartDate).Spread(c.NetProfit, c.ZarIn),
 			Days:   c.HoldDays(),
 		}
 	}
@@ -87,6 +87,7 @@ func (s *Server) handleDetail(w http.ResponseWriter, r *http.Request) {
 	}
 	for _, c := range snap.Cycles {
 		if c.Code == code {
+			fees := s.opts.Fees.At(c.StartDate)
 			vm.Cycle = detailCycleVM{
 				Code:           c.Code,
 				Type:           c.TradeType,
@@ -98,9 +99,9 @@ func (s *Server) handleDetail(w http.ResponseWriter, r *http.Request) {
 				Profit:         c.NetProfit,
 				Return:         c.Return(),
 				AnnualisedHold: c.AnnualisedHold(),
-				Gross:          s.opts.Fees.GrossProfit(c.NetProfit, c.ZarIn),
-				GrossReturn:    s.opts.Fees.GrossReturn(c.NetProfit, c.ZarIn),
-				Spread:         s.opts.Fees.Spread(c.NetProfit, c.ZarIn),
+				Gross:          fees.GrossProfit(c.NetProfit, c.ZarIn),
+				GrossReturn:    fees.GrossReturn(c.NetProfit, c.ZarIn),
+				Spread:         fees.Spread(c.NetProfit, c.ZarIn),
 			}
 			s.render(w, "detail", vm)
 			return

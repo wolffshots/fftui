@@ -1,6 +1,9 @@
 package analytics
 
-import "testing"
+import (
+	"testing"
+	"time"
+)
 
 func TestTierRateBoundaries(t *testing.T) {
 	f := DefaultFees()
@@ -151,5 +154,48 @@ func TestNetReturnImprovesWithCapital(t *testing.T) {
 			t.Errorf("net return fell from %.5f to %.5f at capital %.0f", prev, r, capital)
 		}
 		prev = r
+	}
+}
+
+// Capitec cut the SWIFT/admin fee from R500 to R350 on 1 October 2026. The
+// schedule is keyed on the cycle's start date, so a cycle that starts the day
+// before still pays R530 and its spread must still invert at R530.
+func TestFixedFeeCutIsDated(t *testing.T) {
+	f := DefaultFees()
+	day := func(y int, m time.Month, d int) time.Time {
+		return time.Date(y, m, d, 0, 0, 0, 0, time.UTC)
+	}
+	cases := []struct {
+		date time.Time
+		want float64
+	}{
+		{day(2026, time.August, 15), 530},
+		{day(2026, time.September, 30), 530},
+		{day(2026, time.October, 1), 380},
+		{day(2027, time.March, 1), 380},
+	}
+	for _, c := range cases {
+		if got := f.At(c.date).Fixed; got != c.want {
+			t.Errorf("At(%s).Fixed: got %.0f, want %.0f", c.date.Format("2006-01-02"), got, c.want)
+		}
+	}
+
+	// The whole waterfall must move with it, in both directions.
+	const capital = 250_000
+	before, after := f.At(day(2026, time.September, 30)), f.At(day(2026, time.October, 1))
+	// R150 less in fees, of which FF takes its 30% tier cut: R105 more net.
+	assertClose(t, "net gain from the cut",
+		after.Net(0.012, capital)-before.Net(0.012, capital), 150*(1-0.30), 1e-9)
+	// Inverting an observed net profit must use the same dated fee.
+	net := after.Net(0.012, capital)
+	assertClose(t, "post-cut spread inverts", after.Spread(net, capital), 0.012, 1e-12)
+	if before.Spread(net, capital) <= 0.012 {
+		t.Error("inverting a post-cut cycle at the old fee should overstate the spread")
+	}
+
+	// A flat schedule (a --fee-fixed override) is never re-dated.
+	flat := Fees{Fixed: 400, Variable: f.Variable, Tiers: f.Tiers}
+	if got := flat.At(day(2027, time.January, 1)).Fixed; got != 400 {
+		t.Errorf("override should stay flat, got %.0f", got)
 	}
 }
