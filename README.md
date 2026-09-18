@@ -187,10 +187,9 @@ FF_PASSWORD_CMD=op read op://Personal/FutureForex/password
 
 ## Web UI
 
-The cycles, analytics, detail, charts and live views are available in a browser
-(Returns is TUI-only for now): `--web` serves them alongside the TUI (the URL
-is printed before the TUI starts), and `--web --headless` serves them without
-the TUI — for leaving fftui running on a home server.
+Every view is available in a browser: `--web` serves them alongside the TUI
+(the URL is printed before the TUI starts), and `--web --headless` serves them
+without the TUI — for leaving fftui running on a home server.
 
 ```sh
 # Alongside the TUI:
@@ -200,8 +199,9 @@ go run . --web
 go run . --web --headless --addr 0.0.0.0:8442
 ```
 
-Every page works without JavaScript — sort, filter, granularity and the
-dead-bucket toggle all live in query parameters, so views are bookmarkable.
+Every page works without JavaScript — sort, filter, granularity, the
+dead-bucket toggle and the Returns spread scenario all live in query
+parameters, so views are bookmarkable.
 The refresh button re-pulls from the source (shared with the TUI's `r`).
 
 | Flag / var | Default | Purpose |
@@ -228,12 +228,63 @@ unauthenticated — only do that on a network you trust.
 FF_WEB_TOKEN=$(openssl rand -hex 24) ./fftui --web --headless --addr 0.0.0.0:8442
 ```
 
-Login (and any OTP prompt) still happens on the terminal at startup, so if
-your account uses OTP, run fftui once interactively first to seed the cached
-login token, then start the headless server (or set `FF_TOKEN`). An initial
-refresh is attempted at startup; if it fails, the server starts anyway and
-every page offers a retry. Add `--refresh-interval 10m` to keep the served
-data current without anyone pressing refresh.
+Headless never prompts for an OTP: there is no terminal to read a code from.
+It logs in from `FF_USERNAME`/`FF_PASSWORD`, and if that login fails — wrong
+credentials, or an account that requires an OTP — the server starts anyway and
+every page shows the failure as its error banner with a retry button. That is
+deliberate: exiting would crash-loop a restarting container, and every login
+POST texts the account another code. An account with OTP therefore needs a
+token seeded from an interactive run (see below) until the web UI grows an OTP
+entry page. Add `--refresh-interval 10m` to keep the served data current
+without anyone pressing refresh.
+
+### Container
+
+The release workflow publishes a multi-arch image (linux/amd64 and
+linux/arm64) to `ghcr.io/wolffshots/fftui` on every `v*` tag, tagged with the
+version and `latest`. It is a distroless image running as a non-root user,
+with `--web --headless` as the entrypoint, so extra flags append:
+
+```sh
+docker run --rm -p 127.0.0.1:8442:8442 --env-file .env \
+  ghcr.io/wolffshots/fftui:latest --refresh-interval 10m
+```
+
+`docker-compose.yml` in this repo is the server recipe: it reads `.env`,
+publishes the port on loopback only, and keeps a named volume on `/data` for
+the token cache.
+
+```sh
+docker compose up -d
+```
+
+Notes:
+
+- **Put a reverse proxy with TLS in front of it.** The compose file publishes
+  on `127.0.0.1` for that reason. If you change it to `0.0.0.0`, set
+  `FF_WEB_TOKEN` first — without it the container serves your full trading
+  history unauthenticated.
+- With `FF_WEB_TOKEN` unset the container logs the not-loopback warning at
+  every start, because inside its network namespace it really does listen on
+  `0.0.0.0` and cannot see that you published the port on loopback. Setting a
+  token silences it and is worth doing regardless.
+- `TZ` matters. Cycle dates are bucketed against the local calendar day, and a
+  container defaults to UTC. The compose file sets `Africa/Johannesburg`.
+- **Leave values in `.env` unquoted.** The compose file reads it with
+  `format: raw`, which stops Compose expanding `$` inside a value — a password
+  containing `$VAR` would otherwise reach the API with that chunk cut out — but
+  raw also keeps any surrounding quotes as part of the value. fftui's own
+  loader reads unquoted values literally too, so unquoted suits both.
+  `format: raw` needs Compose v2.30+; on an older one, replace the
+  `path`/`format` lines with plain `env_file: .env` and check that no value
+  contains a `$`.
+- Compose also auto-loads `.env` to interpolate the compose file itself, so a
+  `$` in a value prints a harmless "variable is not set" warning on every
+  command. What the container receives is unaffected.
+- **OTP accounts**: mint a token on a machine with a terminal
+  (`fftui` once, entering the code), then copy
+  `~/.cache/fftui/token-*.json` into the `/data/fftui/` volume. The token
+  lives about an hour, so this is a stopgap, not a deployment.
 
 ## Views
 
@@ -270,8 +321,8 @@ data current without anyone pressing refresh.
   fees, gross profit, FF's tier share, net profit, net return, and the share of
   the spread you keep. The row for your current capital is marked. Below the
   ladder every constituent part of the fee figures is spelled out in statement
-  order, with the break-even capital for that spread. `tab` cycles the
-  projected spread through now / lower / higher / realised — the live feed, the
+  order, with the break-even capital for that spread. `tab` (`?spread=` on the
+  web) cycles the projected spread through now / lower / higher / realised — the live feed, the
   lowest and highest spread the market printed in the last 30 days, and the
   mean spread your own cycles actually caught over the trailing year. CSV mode
   has no market history, so it offers now (which falls back to that trailing
@@ -487,4 +538,6 @@ internal/format/             pure text formatters (money/percent/sparklines)
 internal/ui/                 root model, table/analytics/detail/charts/live/returns views
 internal/webui/              the browser front end (--web): handlers + templates
 testdata/cycles.csv          reference export used by tests
+Dockerfile                   multi-arch image; entrypoint is --web --headless
+docker-compose.yml           server recipe: .env, loopback port, token volume
 ```
