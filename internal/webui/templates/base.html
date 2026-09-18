@@ -24,6 +24,7 @@
   {{if eq .Active "detail"}}<span class="tab-detail active">Detail</span>{{end}}
   <a href="/charts"{{if eq .Active "charts"}} class="active"{{end}}>Charts</a>
   <a href="/live"{{if eq .Active "live"}} class="active"{{end}}>Live</a>
+  <a href="/returns"{{if eq .Active "returns"}} class="active"{{end}}>Returns</a>
   <form class="refresh" method="post" action="/refresh"><button type="submit">refresh</button></form>
 </nav>
 {{if .Err}}

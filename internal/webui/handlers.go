@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"net/url"
 	"strings"
+	"time"
 
 	"github.com/wolffshots/fftui/internal/analytics"
 	"github.com/wolffshots/fftui/internal/data"
@@ -497,4 +498,98 @@ func seriesStats(hist []model.MarketPoint, f func(model.MarketPoint) float64) (s
 		}
 	}
 	return series, min, max, series[len(series)-1]
+}
+
+// handleReturns mirrors ui/returns.go: the capital ladder projected at one
+// spread through the fee waterfall, plus the fee model behind it. The TUI's
+// tab key becomes the ?spread= param.
+func (s *Server) handleReturns(w http.ResponseWriter, r *http.Request) {
+	snap, lastErr := s.svc.Latest()
+	vm := returnsVM{baseVM: s.base("Returns", "returns", snap, lastErr)}
+	if snap == nil {
+		s.render(w, "returns", vm)
+		return
+	}
+
+	in := analytics.ScenarioInput{Cycles: snap.Cycles, Now: snap.Now, Fees: s.opts.Fees}
+	if snap.Market != nil {
+		in.LiveSpread = snap.Market.Current.Spread
+	}
+	if snap.MarketYear != nil {
+		in.History, in.HistoryDays = snap.MarketYear.History, snap.MarketYear.Period
+	}
+	if snap.Client != nil {
+		in.Invested = snap.Client.Status.AmountInvested
+	}
+
+	avail := in.Available()
+	if len(avail) == 0 {
+		s.render(w, "returns", vm) // HasSpread stays false: nothing to project off
+		return
+	}
+	// A URL naming a scenario this data cannot derive falls back to the first
+	// available one rather than rendering an empty ladder.
+	sc := analytics.ParseScenario(r.URL.Query().Get("spread"))
+	spread, source, ok := in.Spread(sc)
+	if !ok {
+		sc = avail[0]
+		spread, source, _ = in.Spread(sc)
+	}
+	for _, a := range avail {
+		vm.Scenarios = append(vm.Scenarios, scenarioVM{
+			Label:  a.String(),
+			URL:    "/returns?spread=" + a.String(),
+			Active: a == sc,
+		})
+	}
+	_, _, hasBounds := in.Spread(analytics.ScenarioLower)
+	vm.NoBounds = !hasBounds
+	vm.HasSpread = true
+	vm.Spread, vm.Scenario, vm.Source = spread*100, sc.String(), source
+
+	fees := s.opts.Fees.At(snap.Now)
+	capitals, now := in.Capitals()
+	for _, capital := range capitals {
+		p := fees.Project(spread, capital)
+		row := returnRowVM{
+			Capital:       p.Capital,
+			GrossEarnings: p.GrossEarnings,
+			ThirdParty:    p.VariableFee + p.FixedFee,
+			GrossProfit:   p.GrossProfit,
+			TierPct:       analytics.TierPct(p.TierRate),
+			SuccessFee:    p.SuccessFee,
+			NetProfit:     p.NetProfit,
+			NetReturn:     p.NetReturn,
+			Now:           capital == now,
+		}
+		if p.NetProfit > 0 && p.GrossEarnings > 0 {
+			row.HasKeep, row.Keep = true, p.NetProfit/p.GrossEarnings
+		}
+		vm.Rows = append(vm.Rows, row)
+	}
+	vm.Fee = feeVM{
+		Spread:     vm.Spread,
+		Fixed:      fees.Fixed,
+		FixedNote:  fixedFeeNote(fees, snap.Now),
+		Variable:   fees.Variable,
+		TierLadder: fees.TierLadder(),
+	}
+	vm.Fee.BreakEven, vm.Fee.HasBreakEven = fees.BreakEven(spread)
+
+	s.render(w, "returns", vm)
+}
+
+// fixedFeeNote breaks the fixed fee into its parts when it is the default
+// schedule, and flags a dated cut before it lands so the ladder is not
+// silently stale.
+func fixedFeeNote(f analytics.Fees, now time.Time) string {
+	note := "bank admin + instant EFT"
+	if f.Fixed == analytics.DefaultFees().At(now).Fixed {
+		note = "Capitec admin " + format.Money(f.Fixed-analytics.EFTFee) +
+			" + instant EFT " + format.Money(analytics.EFTFee)
+	}
+	if !f.FixedFrom.IsZero() && f.FixedFrom.After(now) {
+		note += " — falls to " + format.Money(f.FixedAfter) + " on " + f.FixedFrom.Format("2 Jan 2006")
+	}
+	return note
 }

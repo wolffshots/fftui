@@ -490,3 +490,54 @@ type liveMarketVM struct {
 	RateLatest    float64
 	Period        int
 }
+
+// ---------------------------------------------------------------------------
+// Returns
+// ---------------------------------------------------------------------------
+
+type returnsVM struct {
+	baseVM
+	Scenarios []scenarioVM
+	// NoBounds says the observed lower/higher cases are missing (CSV mode has
+	// no market history), so the strip explains their absence rather than
+	// offering a number it cannot derive.
+	NoBounds  bool
+	HasSpread bool
+	Spread    float64 // percent units, as spreadFmt expects
+	Scenario  string
+	Source    string
+	Rows      []returnRowVM
+	Fee       feeVM
+}
+
+type scenarioVM struct {
+	Label  string
+	URL    string
+	Active bool
+}
+
+type returnRowVM struct {
+	Capital       float64
+	GrossEarnings float64
+	ThirdParty    float64 // fixed + variable, rendered as a deduction
+	GrossProfit   float64
+	TierPct       string
+	SuccessFee    float64
+	NetProfit     float64
+	NetReturn     float64
+	HasKeep       bool    // a losing cycle keeps nothing to split
+	Keep          float64 // net profit ÷ gross earnings
+	Now           bool    // the row at the current cycle capital
+}
+
+// feeVM spells out every constituent part of the fee figures, in statement
+// order, so the net column can be checked by hand.
+type feeVM struct {
+	Spread       float64 // percent units
+	Fixed        float64
+	FixedNote    string
+	Variable     float64
+	TierLadder   string
+	HasBreakEven bool
+	BreakEven    float64
+}

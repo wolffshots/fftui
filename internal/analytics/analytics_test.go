@@ -3,6 +3,7 @@ package analytics
 import (
 	"context"
 	"math"
+	"sort"
 	"testing"
 	"time"
 
@@ -263,5 +264,88 @@ func TestIncludeDeadLowersMedian(t *testing.T) {
 	}
 	if withDead.N <= active.N {
 		t.Errorf("incl-dead should have more buckets: %d vs %d", withDead.N, active.N)
+	}
+}
+
+// TestScenarioInput covers the shared spread resolution both front ends
+// project their returns ladder from: the live feed wins for "now", the
+// observed 30-day bounds come from the market history, and a scenario with no
+// input behind it is dropped rather than projected off a zero.
+func TestScenarioInput(t *testing.T) {
+	now := time.Date(2026, 7, 10, 0, 0, 0, 0, time.UTC)
+	hist := make([]model.MarketPoint, 30)
+	for i := range hist {
+		hist[i] = model.MarketPoint{Spread: 0.50 + float64(i)*0.05} // 0.50% … 1.95%
+	}
+	in := ScenarioInput{
+		Cycles:      []model.Cycle{{StartDate: now.AddDate(0, 0, -30), ZarIn: 200_000, NetProfit: 1_000}},
+		Now:         now,
+		Fees:        DefaultFees(),
+		LiveSpread:  0.80,
+		History:     hist,
+		HistoryDays: 30,
+		Invested:    123_456,
+	}
+
+	for _, tc := range []struct {
+		s    Scenario
+		want float64
+	}{
+		{ScenarioNow, 0.0080},
+		{ScenarioLower, 0.0050},
+		{ScenarioHigher, 0.0195},
+	} {
+		got, src, ok := in.Spread(tc.s)
+		if !ok {
+			t.Fatalf("%v: no spread", tc.s)
+		}
+		if math.Abs(got-tc.want) > 1e-9 {
+			t.Errorf("%v spread = %g, want %g", tc.s, got, tc.want)
+		}
+		if src == "" {
+			t.Errorf("%v: empty source label", tc.s)
+		}
+	}
+	if len(in.Available()) != 4 {
+		t.Errorf("full data should offer every scenario, got %v", in.Available())
+	}
+
+	// No history and no live feed: only the realised figure survives.
+	bare := ScenarioInput{Cycles: in.Cycles, Now: now, Fees: in.Fees}
+	if got := bare.Available(); len(got) != 2 || got[0] != ScenarioNow || got[1] != ScenarioRealised {
+		t.Errorf("CSV mode should offer now + realised only, got %v", got)
+	}
+	if _, _, ok := bare.Spread(ScenarioLower); ok {
+		t.Error("lower must not resolve without market history")
+	}
+	// No cycles either: nothing to project off at all.
+	if got := (ScenarioInput{Now: now, Fees: in.Fees}).Available(); len(got) != 0 {
+		t.Errorf("no data should offer no scenarios, got %v", got)
+	}
+
+	// The current capital slots into the ladder in place, keeping its exact
+	// figure rather than sitting beside a near-identical rung.
+	caps, cur := in.Capitals()
+	if cur != 123_456 {
+		t.Errorf("current capital = %v, want the invested amount", cur)
+	}
+	if len(caps) != len(Ladder)+1 {
+		t.Errorf("capitals = %d rungs, want the ladder plus one", len(caps))
+	}
+	if !sort.Float64sAreSorted(caps) {
+		t.Errorf("capitals not sorted: %v", caps)
+	}
+	// An invested amount already on the ladder replaces the rung, not adds to it.
+	on := in
+	on.Invested = 200_000
+	if caps, _ := on.Capitals(); len(caps) != len(Ladder) {
+		t.Errorf("a capital already on the ladder should not add a rung, got %d", len(caps))
+	}
+
+	if got := ParseScenario("higher"); got != ScenarioHigher {
+		t.Errorf("ParseScenario(higher) = %v", got)
+	}
+	if got := ParseScenario("nonsense"); got != ScenarioNow {
+		t.Errorf("an unknown slug should default to now, got %v", got)
 	}
 }

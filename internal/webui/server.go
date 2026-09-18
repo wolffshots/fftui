@@ -69,7 +69,7 @@ func New(svc *data.Service, opts Options) (*Server, error) {
 		"signClass": signClass,
 		"tip":       tipHTML,
 	}
-	for _, page := range []string{"cycles", "detail", "analytics", "charts", "live"} {
+	for _, page := range []string{"cycles", "detail", "analytics", "charts", "live", "returns"} {
 		t, err := template.New("base.html").Funcs(funcs).ParseFS(content,
 			"templates/base.html", "templates/"+page+".html")
 		if err != nil {
@@ -87,6 +87,7 @@ func New(svc *data.Service, opts Options) (*Server, error) {
 	mux.HandleFunc("GET /analytics", s.handleAnalytics)
 	mux.HandleFunc("GET /charts", s.handleCharts)
 	mux.HandleFunc("GET /live", s.handleLive)
+	mux.HandleFunc("GET /returns", s.handleReturns)
 	mux.HandleFunc("POST /refresh", s.handleRefresh)
 	mux.Handle("GET /static/", staticHandler())
 	s.handler = s.withAuth(mux)

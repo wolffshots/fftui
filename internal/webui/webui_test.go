@@ -85,6 +85,8 @@ func TestRoutes(t *testing.T) {
 		{"/analytics?gran=quarter", "variance"},
 		{"/charts", "Cumulative profit"},
 		{"/live", "only available from the live API"},
+		{"/returns", "fee model"},
+		{"/returns?spread=realised", "break-even capital"},
 		{"/static/style.css", "Phase C"},
 	}
 	for _, tc := range cases {
@@ -498,5 +500,56 @@ func TestDotClassIconOutranksSlug(t *testing.T) {
 		if got := dotClass(tc.slug, tc.icon); got != tc.want {
 			t.Errorf("dotClass(%q, %q) = %q, want %q", tc.slug, tc.icon, got, tc.want)
 		}
+	}
+}
+
+// TestReturns checks the ladder against the fee waterfall computed by hand at
+// R200,000 and the trailing-average spread the CSV mode falls back to:
+// gross earnings R2,668.98, third-party R460.00 + R530.00, FF 30% of the
+// R1,678.98 gross profit. The row for the latest cycle's capital is marked.
+func TestReturns(t *testing.T) {
+	s, _ := newTestServer(t, "", true)
+	body := get(t, s, "/returns").Body.String()
+	for _, want := range []string{
+		"1.33%",                    // the projected spread
+		"no live feed in CSV mode", // how it was derived
+		"lower/higher need the live market history", // the bounds CSV mode cannot offer
+		"R2,668.98",                      // gross earnings at R200k
+		"-R990.00",                       // third-party: 0.23% × R200k + R530
+		"R1,678.98",                      // gross profit
+		"-R503.69",                       // FF success fee, 30% of gross profit
+		`<tr class="now">`,               // the current-capital row
+		"R118,934.87",                    // ...which is the latest cycle's capital
+		"R47,985.90",                     // break-even capital at this spread
+		"up to R150k 35%",                // the success-fee ladder   // the success-fee ladder
+		"Capitec admin R500.00",          // the fixed fee's constituent parts
+		"falls to R380.00 on 1 Oct 2026", // the dated admin cut
+	} {
+		if !strings.Contains(body, want) {
+			t.Errorf("returns page missing %q", want)
+		}
+	}
+	// CSV mode derives two of the four scenarios, so only those are offered.
+	if n := strings.Count(body, `href="/returns?spread=`); n != 2 {
+		t.Errorf("expected 2 scenario links, got %d", n)
+	}
+}
+
+// TestReturnsScenario: the ?spread= param selects the scenario, and one this
+// data cannot derive falls back to an available one rather than rendering an
+// empty ladder.
+func TestReturnsScenario(t *testing.T) {
+	s, _ := newTestServer(t, "", true)
+	if body := get(t, s, "/returns?spread=realised").Body.String(); !strings.Contains(
+		body, "(realised: mean of the 24 cycles you traded in the last year") {
+		t.Error("?spread=realised did not select the realised scenario")
+	}
+	// lower needs market history, which CSV mode has none of.
+	body := get(t, s, "/returns?spread=lower").Body.String()
+	if !strings.Contains(body, "(now: mean of your last 24 cycles") {
+		t.Error("an underivable scenario should fall back to the live-feed default")
+	}
+	if !strings.Contains(body, "R2,668.98") {
+		t.Error("the fallback should still render the ladder")
 	}
 }

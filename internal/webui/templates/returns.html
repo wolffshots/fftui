@@ -1,0 +1,68 @@
+{{define "content"}}
+<section class="returns">
+{{if not .HasSpread}}
+<p class="dim">no spread to project — needs the live market feed, or at least one cycle in the last year</p>
+{{else}}
+<nav class="subtabs">
+{{range .Scenarios}}<a href="{{.URL}}"{{if .Active}} class="active"{{end}}>{{.Label}}</a>
+{{end}}</nav>
+{{if .NoBounds}}<p class="dim scope">lower/higher need the live market history</p>{{end}}
+
+<h1>{{tip "returns-scenario" "Expected return per cycle"}}
+  <span class="dim">at a gross-earnings spread of</span> <span class="val">{{spreadFmt .Spread}}</span>
+  <span class="dim">({{.Scenario}}: {{.Source}})</span></h1>
+
+<div class="tablewrap">
+<table class="ladder">
+<thead><tr>
+  <th>Capital</th>
+  <th class="num">{{tip "gross-earnings" "Gross earn"}}</th>
+  <th class="num">3rd-party</th>
+  <th class="num">{{tip "gross" "Gross profit"}}</th>
+  <th class="num">{{tip "ff-fee" "FF %"}}</th>
+  <th class="num">FF fee</th>
+  <th class="num">Net profit</th>
+  <th class="num">{{tip "return" "Net/cycle"}}</th>
+  <th class="num">{{tip "you-keep" "You keep"}}</th>
+</tr></thead>
+<tbody>
+{{range .Rows}}
+<tr{{if .Now}} class="now"{{end}}>
+  <td>{{money .Capital}}{{if .Now}} <span class="stitle">◀ now</span>{{end}}</td>
+  <td class="num">{{money .GrossEarnings}}</td>
+  <td class="num">-{{money .ThirdParty}}</td>
+  <td class="num {{signClass .GrossProfit}}">{{money .GrossProfit}}</td>
+  <td class="num">{{.TierPct}}</td>
+  <td class="num">{{if .SuccessFee}}-{{end}}{{money .SuccessFee}}</td>
+  <td class="num {{signClass .NetProfit}}">{{money .NetProfit}}</td>
+  <td class="num {{signClass .NetReturn}}">{{percent .NetReturn}}</td>
+  <td class="num">{{if .HasKeep}}{{percent .Keep}}{{else}}—{{end}}</td>
+</tr>
+{{end}}
+</tbody>
+</table>
+</div>
+<p class="dim note">you keep = net profit ÷ gross earnings — your share of the spread after the
+third-party fees and FF's cut.</p>
+
+{{with .Fee}}
+<h2>fee model <span class="dim">per cycle, in statement order</span></h2>
+<dl class="kv">
+  <dt>gross earnings</dt><dd>capital × {{spreadFmt .Spread}} <span class="dim">the market spread FF trades into</span></dd>
+  <dt>− third-party fixed</dt><dd>{{money .Fixed}} <span class="dim">{{.FixedNote}}</span></dd>
+  <dt>− third-party variable</dt><dd>{{percent .Variable}} of capital <span class="dim">bank exchange + offshore receipt + offshore trading</span></dd>
+  <dt>= gross profit</dt><dd>earnings − those fees <span class="dim">the statement's Gross Profit line</span></dd>
+  <dt>− FF success fee</dt><dd>tier % of GROSS PROFIT <span class="dim">taken after the third-party fees, never on a loss</span></dd>
+  <dt></dt><dd class="dim">{{.TierLadder}}</dd>
+  <dt>= net profit</dt><dd>what lands in your account <span class="dim">before income tax</span></dd>
+  <dt>{{tip "break-even" "break-even capital"}}</dt>
+  {{if .HasBreakEven}}<dd>{{money .BreakEven}} <span class="dim">below this the fees are bigger than the spread earns</span></dd>
+  {{else}}<dd>none <span class="dim">the variable fee alone eats this spread — no cycle size profits</span></dd>{{end}}
+</dl>
+{{end}}
+<p class="dim note">modelled, not quoted: the variable fee is assumed proportional at every size.
+Real statements charged 0.228%–0.235% of capital, so a projected net profit is good to about ±1%.
+Override with --fee-fixed / --fee-variable.</p>
+{{end}}
+</section>
+{{end}}

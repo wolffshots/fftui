@@ -1,8 +1,6 @@
 package ui
 
 import (
-	"fmt"
-	"sort"
 	"strings"
 	"time"
 
@@ -26,45 +24,9 @@ type returnsModel struct {
 	market     *model.MarketConditions
 	marketYear *model.MarketConditions // 365d history; the 7d Market series is too short for a 30d window
 	client     *model.ClientStatus
-	scenario   spreadScenario
+	scenario   analytics.Scenario
 	width      int
 	height     int
-}
-
-// spreadScenario selects which spread the ladder is projected at.
-type spreadScenario int
-
-const (
-	scenarioNow      spreadScenario = iota // live market feed (CSV mode: the trailing average)
-	scenarioLower                          // lowest spread the market actually printed recently
-	scenarioHigher                         // highest one
-	scenarioRealised                       // what the account actually caught, after execution timing
-)
-
-var scenarioOrder = []spreadScenario{scenarioNow, scenarioLower, scenarioHigher, scenarioRealised}
-
-func (s spreadScenario) String() string {
-	switch s {
-	case scenarioLower:
-		return "lower"
-	case scenarioHigher:
-		return "higher"
-	case scenarioRealised:
-		return "realised"
-	}
-	return "now"
-}
-
-// scenarioWindow is the history window (days) the lower/higher cases are the
-// bounds of: long enough to have seen a bad and a good market, short enough to
-// still describe the current one.
-const scenarioWindow = 30
-
-// ladder is the capital ladder: every FF fee-tier boundary plus round steps
-// either side, so the tier jumps are visible.
-var ladder = []float64{
-	50_000, 100_000, 150_000, 200_000, 250_000,
-	300_000, 400_000, 500_000, 750_000, 1_000_000,
 }
 
 func newReturnsModel(now time.Time, fees analytics.Fees) returnsModel {
@@ -93,10 +55,26 @@ func (m returnsModel) update(msg tea.Msg, k keyMap) (returnsModel, tea.Cmd) {
 	return m, cmd
 }
 
+// input gathers what the shared projection needs; the web front end builds the
+// same struct, so both quote identical figures.
+func (m returnsModel) input() analytics.ScenarioInput {
+	in := analytics.ScenarioInput{Cycles: m.cycles, Now: m.now, Fees: m.fees}
+	if m.market != nil {
+		in.LiveSpread = m.market.Current.Spread
+	}
+	if m.marketYear != nil {
+		in.History, in.HistoryDays = m.marketYear.History, m.marketYear.Period
+	}
+	if m.client != nil {
+		in.Invested = m.client.Status.AmountInvested
+	}
+	return in
+}
+
 // nextScenario is the next scenario that has an input behind it, wrapping.
 // Scenarios that cannot be derived from the current data are skipped rather
 // than selected and left projecting nothing.
-func (m returnsModel) nextScenario() spreadScenario {
+func (m returnsModel) nextScenario() analytics.Scenario {
 	avail := m.available()
 	for i, s := range avail {
 		if s == m.scenario {
@@ -107,15 +85,7 @@ func (m returnsModel) nextScenario() spreadScenario {
 }
 
 // available lists the scenarios this data supports, in strip order.
-func (m returnsModel) available() []spreadScenario {
-	var out []spreadScenario
-	for _, s := range scenarioOrder {
-		if _, _, ok := m.spreadFor(s); ok {
-			out = append(out, s)
-		}
-	}
-	return out
-}
+func (m returnsModel) available() []analytics.Scenario { return m.input().Available() }
 
 // scenarioTabs mirrors the Analytics granularity strip. CSV mode has no market
 // history, so the observed bounds are left off the strip entirely — with the
@@ -131,7 +101,7 @@ func (m returnsModel) scenarioTabs() string {
 	}
 	strip := dimStyle.Render("tab ▸ ") + lipgloss.JoinHorizontal(lipgloss.Top, parts...)
 	// Both bounds come from the one history series, so one check covers both.
-	if _, _, ok := m.spreadFor(scenarioLower); !ok {
+	if _, _, ok := m.input().Spread(analytics.ScenarioLower); !ok {
 		strip += dimStyle.Render("  (lower/higher need the live market history)")
 	}
 	return strip
@@ -145,82 +115,7 @@ func (m returnsModel) view() string {
 
 // spread resolves the spread to project at, for the active scenario.
 func (m returnsModel) spread() (frac float64, source string, ok bool) {
-	return m.spreadFor(m.scenario)
-}
-
-// spreadFor resolves one scenario to a spread and the label saying how it was
-// derived. This is a money view, so a scenario with no input reports ok=false
-// instead of a zero: the caller drops it rather than project off it.
-func (m returnsModel) spreadFor(s spreadScenario) (frac float64, source string, ok bool) {
-	realised := func() (float64, int) { return analytics.AvgSpread(m.cycles, m.now, m.fees) }
-
-	switch s {
-	case scenarioLower, scenarioHigher:
-		if m.marketYear == nil {
-			return 0, "", false
-		}
-		low, high, ok := analytics.SpreadRange(m.marketYear.History, m.marketYear.Period, scenarioWindow)
-		if !ok || low <= 0 {
-			return 0, "", false
-		}
-		if s == scenarioLower {
-			return low / 100, fmt.Sprintf("lowest spread in the last %d days of market history", scenarioWindow), true
-		}
-		return high / 100, fmt.Sprintf("highest spread in the last %d days of market history", scenarioWindow), true
-
-	case scenarioRealised:
-		avg, n := realised()
-		if n == 0 || avg <= 0 {
-			return 0, "", false
-		}
-		return avg, fmt.Sprintf("mean of the %d cycles you traded in the last year, backed out through the fee model", n), true
-	}
-
-	if m.market != nil && m.market.Current.Spread > 0 {
-		return m.market.Current.Spread / 100, "live market feed", true
-	}
-	avg, n := realised()
-	if n == 0 || avg <= 0 {
-		return 0, "", false
-	}
-	return avg, fmt.Sprintf("mean of your last %d cycles — no live feed in CSV mode, so this is the realised figure", n), true
-}
-
-// currentCapital is the in-flight cycle's capital when live, else the latest
-// cycle's ZAR in — the row marked "◀ now" on the ladder.
-func (m returnsModel) currentCapital() float64 {
-	if m.client != nil && m.client.Status.AmountInvested > 0 {
-		return m.client.Status.AmountInvested
-	}
-	var latest time.Time
-	var capital float64
-	for _, c := range m.cycles {
-		if !c.StartDate.Before(latest) {
-			latest, capital = c.StartDate, c.ZarIn
-		}
-	}
-	return capital
-}
-
-// capitals is the ladder with the current capital slotted in (deduped to the
-// nearest rand so it doesn't sit next to an identical rung).
-func (m returnsModel) capitals() (list []float64, now float64) {
-	now = m.currentCapital()
-	list = append(list, ladder...)
-	if now > 0 {
-		list = append(list, now)
-		sort.Float64s(list)
-		out := list[:1]
-		for _, v := range list[1:] {
-			if v-out[len(out)-1] >= 1 {
-				out = append(out, v)
-			} else if v == now {
-				out[len(out)-1] = now // keep the exact figure, drop the rung
-			}
-		}
-		list = out
-	}
-	return list, now
+	return m.input().Spread(m.scenario)
 }
 
 const (
@@ -257,7 +152,7 @@ func (m returnsModel) render() string {
 	b.WriteString(header + "\n")
 
 	fees := m.fees.At(m.now)
-	capitals, now := m.capitals()
+	capitals, now := m.input().Capitals()
 	for _, capital := range capitals {
 		p := fees.Project(spread, capital)
 		// "You keep" is the share of the gross EARNINGS that survives both the
@@ -270,7 +165,7 @@ func (m returnsModel) render() string {
 			rightPad(money(p.GrossEarnings), wEarn) +
 			rightPad(charged(p.VariableFee+p.FixedFee), wThird) +
 			rightPad(colourMoney(p.GrossProfit), wGrossP) +
-			rightPad(tierPct(p.TierRate), wTierPct) +
+			rightPad(analytics.TierPct(p.TierRate), wTierPct) +
 			rightPad(charged(p.SuccessFee), wFFFee) +
 			rightPad(colourMoney(p.NetProfit), wNetP) +
 			rightPad(colourReturn(p.NetReturn), wNetRet) +
@@ -316,7 +211,7 @@ func (m returnsModel) renderFeeModel(spread float64) string {
 	lines = append(lines, row("= gross profit", "earnings − those fees", "the statement's Gross Profit line"))
 	lines = append(lines, row("− FF success fee", "tier % of GROSS PROFIT",
 		"FF's share is taken after the third-party fees, never on a loss"))
-	lines = append(lines, labelStyle.Render(pad("", 24))+dimStyle.Render(tierLadder(f)))
+	lines = append(lines, labelStyle.Render(pad("", 24))+dimStyle.Render(f.TierLadder()))
 	lines = append(lines, row("= net profit", "what lands in your account", "before income tax"))
 
 	if be, ok := f.BreakEven(spread); ok {
@@ -333,29 +228,6 @@ func (m returnsModel) renderFeeModel(spread float64) string {
 			"Override with --fee-fixed / --fee-variable.")
 }
 
-// tierLadder renders the success-fee schedule, e.g.
-// "under R150k 35% · R150k+ 33% · R200k+ 30%".
-func tierLadder(f analytics.Fees) string {
-	if len(f.Tiers) == 0 {
-		return "no success-fee tiers configured"
-	}
-	parts := make([]string, 0, len(f.Tiers))
-	for i, t := range f.Tiers {
-		label := randK(t.Min) + "+"
-		if i == 0 {
-			label = "up to " + randK(f.Tiers[1].Min)
-			if len(f.Tiers) == 1 {
-				label = "any capital"
-			}
-		}
-		parts = append(parts, label+" "+tierPct(t.Rate))
-	}
-	return strings.Join(parts, " · ")
-}
-
-// tierPct renders a success-fee rate without trailing zeros: 30%, 32.5%.
-func tierPct(rate float64) string { return fmt.Sprintf("%.4g%%", rate*100) }
-
 // charged renders a fee as a deduction, and a fee that is not levied (a losing
 // cycle pays FF nothing) as a plain zero rather than "-R0.00".
 func charged(v float64) string {
@@ -363,12 +235,4 @@ func charged(v float64) string {
 		return money(0)
 	}
 	return "-" + money(v)
-}
-
-// randK is a compact rand amount for tier labels: R150k, R1.0m.
-func randK(v float64) string {
-	if v >= 1_000_000 {
-		return fmt.Sprintf("R%.1fm", v/1_000_000)
-	}
-	return fmt.Sprintf("R%.0fk", v/1000)
 }

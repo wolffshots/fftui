@@ -489,7 +489,7 @@ func TestReturnsSpreadScenarios(t *testing.T) {
 		t.Errorf("expected the realised scenario after higher, got:\n%s", out)
 	}
 	m = send(m, tea.KeyMsg{Type: tea.KeyTab}) // wraps
-	if m.returns.scenario != scenarioNow {
+	if m.returns.scenario != analytics.ScenarioNow {
 		t.Errorf("scenario should wrap back to now, got %v", m.returns.scenario)
 	}
 }

@@ -153,6 +153,7 @@ th.active a { text-decoration: underline; } /* sorted column */
 th.num, td.num { text-align: right; }
 tbody tr:hover { background: color-mix(in srgb, var(--accent) 10%, transparent); }
 tr.partial { color: var(--dim); }
+tr.now { background: color-mix(in srgb, var(--accent) 14%, transparent); }
 
 /* Cycles table on small screens: hide Type (2), End (4), ZAR Out (6) so
    Code, Start, ZAR In, Profit, Return%, Days fit ~375px. */
@@ -161,6 +162,12 @@ tr.partial { color: var(--dim); }
   .cycles-table th:nth-child(2), .cycles-table td:nth-child(2),
   .cycles-table th:nth-child(4), .cycles-table td:nth-child(4),
   .cycles-table th:nth-child(6), .cycles-table td:nth-child(6) { display: none; }
+  /* Returns ladder: hide the intermediate waterfall columns (3rd-party, FF %,
+     FF fee) so Capital, Gross earn, Gross profit, Net profit, Net/cycle and
+     You keep fit. The fee model below spells the hidden parts out anyway. */
+  .ladder th:nth-child(3), .ladder td:nth-child(3),
+  .ladder th:nth-child(5), .ladder td:nth-child(5),
+  .ladder th:nth-child(6), .ladder td:nth-child(6) { display: none; }
 }
 
 .table-footer {

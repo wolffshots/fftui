@@ -1,6 +1,10 @@
 package analytics
 
-import "time"
+import (
+	"fmt"
+	"strings"
+	"time"
+)
 
 // Fees models the per-cycle fee waterfall shown on the Future Forex cycle
 // statements:
@@ -164,4 +168,35 @@ func (f Fees) GrossReturn(net, capital float64) float64 {
 		return 0
 	}
 	return f.GrossProfit(net, capital) / capital
+}
+
+// TierPct renders a success-fee rate without trailing zeros: 30%, 32.5%.
+func TierPct(rate float64) string { return fmt.Sprintf("%.4g%%", rate*100) }
+
+// TierLadder renders the success-fee schedule, e.g.
+// "up to R150k 35% · R150k+ 33% · R200k+ 30%".
+func (f Fees) TierLadder() string {
+	if len(f.Tiers) == 0 {
+		return "no success-fee tiers configured"
+	}
+	parts := make([]string, 0, len(f.Tiers))
+	for i, t := range f.Tiers {
+		label := randK(t.Min) + "+"
+		if i == 0 {
+			label = "up to " + randK(f.Tiers[1].Min)
+			if len(f.Tiers) == 1 {
+				label = "any capital"
+			}
+		}
+		parts = append(parts, label+" "+TierPct(t.Rate))
+	}
+	return strings.Join(parts, " · ")
+}
+
+// randK is a compact rand amount for tier labels: R150k, R1.0m.
+func randK(v float64) string {
+	if v >= 1_000_000 {
+		return fmt.Sprintf("R%.1fm", v/1_000_000)
+	}
+	return fmt.Sprintf("R%.0fk", v/1000)
 }

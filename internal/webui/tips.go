@@ -113,6 +113,19 @@ var tips = map[string]string{
 		"the trailing year, quoted as the change per 90 days, with a t-test " +
 		"(roughly the 95% level) separating real decay or improvement from " +
 		"noise.",
+	"returns-scenario": "Which spread the ladder is projected at: the live " +
+		"market feed, the lowest or highest spread the market printed in the " +
+		"last 30 days, or the mean spread your own cycles actually caught over " +
+		"the trailing year. Scenarios this data cannot derive are left off.",
+	"ff-fee": "Future Forex's success fee: a percentage of the cycle's gross " +
+		"profit, stepping down through capital tiers as cycle size grows. It " +
+		"is taken after the third-party fees and never on a loss.",
+	"you-keep": "Net profit divided by gross earnings — the share of the raw " +
+		"spread that survives both the third-party fees and Future Forex's " +
+		"cut. A losing cycle keeps nothing to split, so it shows a dash.",
+	"break-even": "The cycle capital at which gross profit reaches zero for " +
+		"this spread: below it the fixed and variable third-party fees cost " +
+		"more than the spread earns.",
 	"spread": "The percentage gap between the local and offshore price of " +
 		"the same dual-listed asset — the raw market margin a cycle " +
 		"captures before fees.",
