@@ -128,12 +128,21 @@ func main() {
 			os.Exit(1)
 		}
 		live := model.NewLiveSource()
-		// Authenticate up front so an OTP prompt (if the account requires one)
-		// happens here on the terminal rather than inside the alt-screen UI.
-		live.OTPFunc = promptOTP
+		if !*headless {
+			// Authenticate up front so an OTP prompt (if the account requires
+			// one) happens here on the terminal rather than inside the
+			// alt-screen UI. Headless has no terminal to read a code from.
+			live.OTPFunc = promptOTP
+		}
 		if err := live.EnsureToken(context.Background()); err != nil {
-			fmt.Fprintln(os.Stderr, "login failed:", err)
-			os.Exit(1)
+			if !*headless {
+				fmt.Fprintln(os.Stderr, "login failed:", err)
+				os.Exit(1)
+			}
+			// Serve anyway: every page shows the failure as its error banner
+			// and offers a retry. Exiting here would crash-loop a restarting
+			// container, and each login POST texts the account another OTP.
+			fmt.Fprintln(os.Stderr, "login failed (serving anyway):", err)
 		}
 		live.OTPFunc = nil // never prompt from inside the running UI
 		source = live
