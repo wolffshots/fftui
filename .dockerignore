@@ -1,0 +1,17 @@
+# Credentials must never reach the build context.
+.env
+
+.git
+.github
+.claude
+dist
+testdata
+scripts
+demo.gif
+demo.tape
+*.md
+LICENSE
+# Locally built binaries (the repo carries an 11MB one).
+fftui
+fftui.exe
+*.exe

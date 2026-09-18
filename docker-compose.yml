@@ -1,0 +1,29 @@
+services:
+  fftui:
+    image: ghcr.io/wolffshots/fftui:latest
+    restart: unless-stopped
+    env_file:
+      # FF_USERNAME, FF_PASSWORD and FF_WEB_TOKEN live here — see .env.example.
+      # format: raw stops Compose expanding $ in the values: a password
+      # containing $VAR would otherwise arrive at the API with that chunk cut
+      # out. It also means values must be left UNQUOTED — raw keeps the quotes.
+      # Needs Compose v2.30+; on an older one, see the README.
+      - path: .env
+        format: raw
+    environment:
+      # Keep the served data current without anyone pressing refresh.
+      FF_REFRESH_INTERVAL: 30m
+      # Cycle dates are bucketed against the local calendar day.
+      TZ: Africa/Johannesburg
+    # Loopback only: put a reverse proxy with TLS in front of this. Publishing
+    # on 0.0.0.0 serves your full trading history to the whole network, so set
+    # FF_WEB_TOKEN before you do.
+    ports:
+      - "127.0.0.1:8442:8442"
+    volumes:
+      # Persists the minted login token, so a restart inside its ~1h life
+      # skips the login round trip.
+      - fftui-cache:/data
+
+volumes:
+  fftui-cache:
