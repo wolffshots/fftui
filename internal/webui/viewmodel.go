@@ -527,6 +527,8 @@ type returnRowVM struct {
 	NetReturn     float64
 	HasKeep       bool    // a losing cycle keeps nothing to split
 	Keep          float64 // net profit ÷ gross earnings
+	HasMinSpread  bool
+	MinSpread     float64 // gross-earnings spread this capital breaks even at
 	Now           bool    // the row at the current cycle capital
 }
 

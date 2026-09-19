@@ -521,7 +521,10 @@ func TestReturns(t *testing.T) {
 		`<tr class="now">`,               // the current-capital row
 		"R118,934.87",                    // ...which is the latest cycle's capital
 		"R47,985.90",                     // break-even capital at this spread
-		"up to R150k 35%",                // the success-fee ladder   // the success-fee ladder
+		"up to R150k 35%",                // the success-fee ladder
+		"Min spread",                     // the break-even-spread column
+		">0.49%<",                        // ...its value at R200k: 0.23% + R530/R200k
+		">1.29%<",                        // ...and at R50k, where the fixed fee dominates
 		"Capitec admin R500.00",          // the fixed fee's constituent parts
 		"falls to R380.00 on 1 Oct 2026", // the dated admin cut
 	} {

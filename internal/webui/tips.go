@@ -123,6 +123,13 @@ var tips = map[string]string{
 	"you-keep": "Net profit divided by gross earnings — the share of the raw " +
 		"spread that survives both the third-party fees and Future Forex's " +
 		"cut. A losing cycle keeps nothing to split, so it shows a dash.",
+	"min-spread": "The gross-earnings spread this cycle size must catch to " +
+		"break even, so anything thinner loses money whatever else happens. " +
+		"Future Forex's success fee is a share of gross profit, so a " +
+		"break-even cycle pays none and it drops out: the floor is the " +
+		"variable third-party fee plus the fixed fee divided by the capital. " +
+		"The fixed half amortises away as cycles grow, which is why a bigger " +
+		"cycle clears on a thinner market.",
 	"break-even": "The cycle capital at which gross profit reaches zero for " +
 		"this spread: below it the fixed and variable third-party fees cost " +
 		"more than the spread earns.",

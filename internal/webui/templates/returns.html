@@ -24,6 +24,7 @@
   <th class="num">Net profit</th>
   <th class="num">{{tip "return" "Net/cycle"}}</th>
   <th class="num">{{tip "you-keep" "You keep"}}</th>
+  <th class="num">{{tip "min-spread" "Min spread"}}</th>
 </tr></thead>
 <tbody>
 {{range .Rows}}
@@ -37,6 +38,7 @@
   <td class="num {{signClass .NetProfit}}">{{money .NetProfit}}</td>
   <td class="num {{signClass .NetReturn}}">{{percent .NetReturn}}</td>
   <td class="num">{{if .HasKeep}}{{percent .Keep}}{{else}}—{{end}}</td>
+  <td class="num">{{if .HasMinSpread}}{{percent .MinSpread}}{{else}}—{{end}}</td>
 </tr>
 {{end}}
 </tbody>
@@ -44,6 +46,9 @@
 </div>
 <p class="dim note">you keep = net profit ÷ gross earnings — your share of the spread after the
 third-party fees and FF's cut.</p>
+<p class="dim note">min spread = the gross-earnings spread this capital must catch to break even:
+{{with .Fee}}{{percent .Variable}} + {{money .Fixed}} ÷ capital{{end}}, so it falls as the fixed fee
+amortises over a bigger cycle.</p>
 
 {{with .Fee}}
 <h2>fee model <span class="dim">per cycle, in statement order</span></h2>

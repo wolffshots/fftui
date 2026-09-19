@@ -128,6 +128,7 @@ const (
 	wNetP    = 13
 	wNetRet  = 11
 	wKeep    = 10
+	wMinSprd = 11
 )
 
 func (m returnsModel) render() string {
@@ -148,7 +149,7 @@ func (m returnsModel) render() string {
 			rightPad("3rd-party", wThird) + rightPad("Gross profit", wGrossP) +
 			rightPad("FF %", wTierPct) + rightPad("FF fee", wFFFee) +
 			rightPad("Net profit", wNetP) + rightPad("Net/cycle", wNetRet) +
-			rightPad("You keep", wKeep))
+			rightPad("You keep", wKeep) + rightPad("Min spread", wMinSprd))
 	b.WriteString(header + "\n")
 
 	fees := m.fees.At(m.now)
@@ -169,7 +170,8 @@ func (m returnsModel) render() string {
 			rightPad(charged(p.SuccessFee), wFFFee) +
 			rightPad(colourMoney(p.NetProfit), wNetP) +
 			rightPad(colourReturn(p.NetReturn), wNetRet) +
-			rightPad(keep, wKeep)
+			rightPad(keep, wKeep) +
+			rightPad(minSpread(fees, capital), wMinSprd)
 		if capital == now {
 			line += titleStyle.Render("  ◀ now")
 		}
@@ -180,6 +182,17 @@ func (m returnsModel) render() string {
 
 	b.WriteString("\n" + m.renderFeeModel(spread))
 	return lipgloss.NewStyle().Padding(0, 1).Render(b.String())
+}
+
+// minSpread renders the break-even spread for one capital: below it the cycle
+// loses money whatever the market does. Shown per row because the fixed fee
+// amortises, so a bigger cycle clears on a thinner market.
+func minSpread(f analytics.Fees, capital float64) string {
+	be, ok := f.BreakEvenSpread(capital)
+	if !ok {
+		return "—"
+	}
+	return percent(be)
 }
 
 // renderFeeModel spells out every constituent part of the fee figures above, in

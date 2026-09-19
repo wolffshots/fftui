@@ -141,6 +141,23 @@ func (f Fees) BreakEven(spread float64) (float64, bool) {
 	return f.Fixed / (spread - f.Variable), true
 }
 
+// BreakEvenSpread inverts BreakEven: the gross-earnings spread a cycle of this
+// capital must catch for gross profit to reach zero. FF's success fee is a
+// share of gross profit, so a break-even cycle pays none and it drops out —
+// the floor is the third-party fees alone.
+//
+//	spread = Variable + Fixed/capital
+//
+// The variable fee is the floor this can never fall below, and the fixed fee
+// amortises away as capital grows, which is why bigger cycles clear on a
+// thinner market. The second result is false for a non-positive capital.
+func (f Fees) BreakEvenSpread(capital float64) (float64, bool) {
+	if capital <= 0 {
+		return 0, false
+	}
+	return f.Variable + f.Fixed/capital, true
+}
+
 // Spread inverts Net: the gross-earnings spread implied by an observed net
 // profit at a known capital. Used to back the market spread out of the cycle
 // history so returns can be projected at other capital sizes.

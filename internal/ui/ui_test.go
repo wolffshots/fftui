@@ -416,6 +416,8 @@ func TestReturnsView(t *testing.T) {
 		"instant EFT",     // the fixed-fee constituent parts
 		"GROSS PROFIT",    // what FF's share is a cut of
 		"up to R150k 35%", // the success-fee ladder
+		"Min spread",      // the break-even-spread column
+		"1.29%",           // ...its value at R50k: 0.23% + R530/R50k
 	} {
 		if !strings.Contains(out, want) {
 			t.Errorf("returns view missing %q", want)

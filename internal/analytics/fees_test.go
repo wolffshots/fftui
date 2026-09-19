@@ -1,6 +1,7 @@
 package analytics
 
 import (
+	"math"
 	"testing"
 	"time"
 )
@@ -197,5 +198,68 @@ func TestFixedFeeCutIsDated(t *testing.T) {
 	flat := Fees{Fixed: 400, Variable: f.Variable, Tiers: f.Tiers}
 	if got := flat.At(day(2027, time.January, 1)).Fixed; got != 400 {
 		t.Errorf("override should stay flat, got %.0f", got)
+	}
+}
+
+// TestBreakEvenSpread pins the minimum spread a cycle must catch, which falls
+// as the fixed fee amortises over a bigger cycle. Worked by hand at the
+// default schedule: 0.23% + R530/capital.
+func TestBreakEvenSpread(t *testing.T) {
+	f := DefaultFees() // before the admin cut: R530 fixed
+
+	for _, tc := range []struct {
+		capital, want float64
+	}{
+		{50_000, 0.0023 + 530.0/50_000},       // 1.29%
+		{200_000, 0.0023 + 530.0/200_000},     // 0.495%
+		{1_000_000, 0.0023 + 530.0/1_000_000}, // 0.283%
+	} {
+		got, ok := f.BreakEvenSpread(tc.capital)
+		if !ok {
+			t.Fatalf("capital %v: not ok", tc.capital)
+		}
+		if math.Abs(got-tc.want) > 1e-12 {
+			t.Errorf("BreakEvenSpread(%v) = %v, want %v", tc.capital, got, tc.want)
+		}
+		// It is the exact inverse of BreakEven, so the pair must round-trip.
+		back, ok := f.BreakEven(got)
+		if !ok {
+			t.Fatalf("capital %v: BreakEven not ok at the break-even spread", tc.capital)
+		}
+		if math.Abs(back-tc.capital) > 1e-6 {
+			t.Errorf("round trip at %v gave %v", tc.capital, back)
+		}
+		// A break-even cycle earns no gross profit, so FF is owed nothing.
+		p := f.Project(got, tc.capital)
+		if math.Abs(p.GrossProfit) > 1e-6 || p.SuccessFee != 0 {
+			t.Errorf("at the break-even spread, gross profit = %v and FF fee = %v, want 0 and 0",
+				p.GrossProfit, p.SuccessFee)
+		}
+	}
+
+	// Bigger cycles clear on a thinner market.
+	small, _ := f.BreakEvenSpread(50_000)
+	big, _ := f.BreakEvenSpread(1_000_000)
+	if !(big < small) {
+		t.Errorf("break-even spread should fall with capital, got %v at R50k and %v at R1m", small, big)
+	}
+	// The variable fee is the floor it can never drop below.
+	if big <= f.Variable {
+		t.Errorf("break-even spread %v must stay above the variable fee %v", big, f.Variable)
+	}
+
+	// The dated admin cut lowers the floor from 1 October 2026.
+	after := f.At(AdminCutDate)
+	cut, _ := after.BreakEvenSpread(200_000)
+	if want := 0.0023 + 380.0/200_000; math.Abs(cut-want) > 1e-12 {
+		t.Errorf("after the admin cut = %v, want %v", cut, want)
+	}
+	before, _ := f.At(AdminCutDate.AddDate(0, 0, -1)).BreakEvenSpread(200_000)
+	if !(cut < before) {
+		t.Errorf("the admin cut should lower the floor: %v before, %v after", before, cut)
+	}
+
+	if _, ok := f.BreakEvenSpread(0); ok {
+		t.Error("a zero capital has no break-even spread")
 	}
 }

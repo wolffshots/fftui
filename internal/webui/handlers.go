@@ -565,6 +565,7 @@ func (s *Server) handleReturns(w http.ResponseWriter, r *http.Request) {
 		if p.NetProfit > 0 && p.GrossEarnings > 0 {
 			row.HasKeep, row.Keep = true, p.NetProfit/p.GrossEarnings
 		}
+		row.MinSpread, row.HasMinSpread = fees.BreakEvenSpread(capital)
 		vm.Rows = append(vm.Rows, row)
 	}
 	vm.Fee = feeVM{

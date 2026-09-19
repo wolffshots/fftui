@@ -317,16 +317,20 @@ Notes:
   used for the SDA; available, pending (with the working days since the
   application) and still-to-apply-for for the AIT.
 - **Returns** — what a cycle earns at each capital size at one spread, run
-  through the fee waterfall below: gross earnings, third-party
-  fees, gross profit, FF's tier share, net profit, net return, and the share of
-  the spread you keep. The row for your current capital is marked. Below the
-  ladder every constituent part of the fee figures is spelled out in statement
-  order, with the break-even capital for that spread. `tab` (`?spread=` on the
-  web) cycles the projected spread through now / lower / higher / realised — the live feed, the
-  lowest and highest spread the market printed in the last 30 days, and the
-  mean spread your own cycles actually caught over the trailing year. CSV mode
-  has no market history, so it offers now (which falls back to that trailing
-  mean) and realised only.
+  through the fee waterfall below: gross earnings, third-party fees, gross
+  profit, FF's tier share, net profit, net return, the share of the spread you
+  keep, and the minimum spread that cycle size must catch to break even. That
+  minimum is `variable fee + fixed fee / capital`, so it falls as the fixed fee
+  amortises over a bigger cycle and flattens out at the variable fee. FF's
+  success fee is a cut of gross profit, so a break-even cycle pays none and it
+  drops out of the figure. The row for your current capital is marked. Below
+  the ladder every constituent part of the fee figures is spelled out in
+  statement order, with the break-even capital for that spread. `tab`
+  (`?spread=` on the web) cycles the projected spread through now / lower /
+  higher / realised — the live feed, the lowest and highest spread the market
+  printed in the last 30 days, and the mean spread your own cycles actually
+  caught over the trailing year. CSV mode has no market history, so it offers
+  now (which falls back to that trailing mean) and realised only.
 
 ## Methodology
 
