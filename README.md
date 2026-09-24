@@ -33,6 +33,24 @@ that started earlier keep the R530 they were billed, so their gross and spread
 columns still match the statements. See [Fee model](#fee-model-fee-ladder-and-capital-projections)
 for the full waterfall.
 
+### Scoop (Windows)
+
+```powershell
+scoop bucket add wolffshots https://github.com/wolffshots/scoop-bucket
+scoop install wolffshots/fftui
+```
+
+Installs the prebuilt Windows x86-64 binary from the latest release via
+[wolffshots/scoop-bucket](https://github.com/wolffshots/scoop-bucket), which
+picks up new tags automatically. Upgrade an existing install with:
+
+```powershell
+scoop update; scoop update fftui
+```
+
+Then create the config file (`%AppData%\fftui\config.env`) with
+`fftui --init-config`; see [Credentials](#credentials).
+
 ### Prebuilt binaries
 
 Download the binary for your platform from the [latest release](https://github.com/wolffshots/fftui/releases/latest):
