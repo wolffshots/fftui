@@ -121,8 +121,9 @@ const configTemplate = `# fftui user config. KEY=VALUE, read literally (no $ exp
 # Idle-cash rate (% per year) credited to days the capital isn't in a trade.
 # Track the reserve bank rate here: a flat rate ("6.25") or a dated schedule,
 # base rate then YYYY-MM-DD:rate for each change. Each idle day earns the rate
-# in force that day. Default below. (--idle-rate flag overrides.)
-# FF_IDLE_RATE=6,2026-09-25:6.25
+# in force that day. Add a date:rate entry each time the rate moves.
+# (--idle-rate flag overrides.)
+FF_IDLE_RATE=6,2026-09-25:6.25
 
 # Marginal tax rate (%) on returns, for the effective (net take-home) figure.
 # Default 41. (--tax-rate flag overrides.)

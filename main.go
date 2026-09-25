@@ -344,6 +344,9 @@ func parseFeeTiers(s string) ([]analytics.FeeTier, error) {
 
 // defaultIdleRates is the built-in idle-rate schedule: 6% until the 25bp hike
 // effective 2026-09-25. Add a date:rate entry each time the rate moves.
+// Update every copy of the schedule in the same change: this constant, the
+// config template in env.go, .env.example, the README (FF_IDLE_RATE row and
+// the with-idle section) and the pinned default in TestParseIdleRates.
 const defaultIdleRates = "6,2026-09-25:6.25"
 
 // parseIdleRates parses "base,YYYY-MM-DD:rate,..." (percentages) into dated
