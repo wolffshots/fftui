@@ -123,8 +123,8 @@ func TestCyclesTable(t *testing.T) {
 	if code := firstRowCode(t, body); code != "FX0043" {
 		t.Errorf("default sort should be newest first, first row %s", code)
 	}
-	// Lifetime footer: annualised → +idle@6% → net@41%, plus total profit.
-	for _, want := range []string{"9.78%", "15.13%", "8.91%", "R19,422.50", "+idle@6.00%", "net@41.00%"} {
+	// Lifetime footer: annualised → +idle → net@41%, plus total profit.
+	for _, want := range []string{"9.78%", "15.13%", "8.91%", "R19,422.50", "+idle", "net@41.00%"} {
 		if !strings.Contains(body, want) {
 			t.Errorf("footer missing %q", want)
 		}
@@ -143,7 +143,7 @@ func TestCyclesFilterAndSort(t *testing.T) {
 	if !strings.Contains(body, "annualised n/a (filtered)") {
 		t.Error("filtered footer should hide annualised rates")
 	}
-	if strings.Contains(body, "+idle@") {
+	if strings.Contains(body, ">+idle<") {
 		t.Error("filtered footer should not show the +idle rate")
 	}
 
@@ -179,9 +179,7 @@ func TestAnalytics(t *testing.T) {
 	s, _ := newTestServer(t, "", true)
 
 	body := get(t, s, "/analytics?gran=month").Body.String()
-	// Note: values injected from Go get HTML-escaped, so "+Idle@6%" appears
-	// as "&#43;Idle@6%" in the source; match past the plus.
-	for _, want := range []string{"2024-09", "Annualised%", "Idle@6%", "Net@41%", "bootstrap 90% band", "return trend", "taxable profit"} {
+	for _, want := range []string{"2024-09", "Annualised%", "+Idle%", "Net@41%", "bootstrap 90% band", "return trend", "taxable profit"} {
 		if !strings.Contains(body, want) {
 			t.Errorf("analytics missing %q", want)
 		}

@@ -554,7 +554,7 @@ func TestFilteredFooterHidesAnnualised(t *testing.T) {
 	}
 	m = send(m, tea.KeyMsg{Type: tea.KeyEnter})
 	out := m.table.view()
-	if !strings.Contains(out, "annualised n/a") || strings.Contains(out, "+idle@") {
+	if !strings.Contains(out, "annualised n/a") || strings.Contains(out, "+idle ") {
 		t.Errorf("filtered footer should hide annualised rates, got:\n%s", out)
 	}
 }

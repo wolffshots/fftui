@@ -192,7 +192,7 @@ FF_PASSWORD_CMD=op read op://Personal/FutureForex/password
 | `FF_AUTH_URL` | — | override the login host (CSRF + login) |
 | `FF_FROM` / `FF_TO` | — | date window (YYYY-MM-DD): only show cycles overlapping `[from, to]`; also `--from` / `--to` |
 | `FF_REFRESH_INTERVAL` | `0` | auto-refresh interval (Go duration: `30s`, `5m`); `0` = manual refresh only; also `--refresh-interval` |
-| `FF_IDLE_RATE` | `6` | idle-cash rate (% p.a.); also `--idle-rate` |
+| `FF_IDLE_RATE` | `6,2026-09-25:6.25` | idle-cash rate (% p.a.): flat (`6.25`) or a dated schedule (base rate, then `YYYY-MM-DD:rate` per change); also `--idle-rate` |
 | `FF_TAX_RATE` | `41` | marginal tax rate (%) on returns; also `--tax-rate` |
 | `FF_SDA_LIMIT` | `2000000` | annual Single Discretionary Allowance in rand; also `--sda-limit` |
 | `FF_AIT_LIMIT` | `10000000` | annual Approval for International Transfer allowance in rand (ex-FIA, `FF_FIA_LIMIT` still read); also `--ait-limit`. SDA+AIT form the planning pool; both `0` hides it |
@@ -383,8 +383,10 @@ in the table, so it doesn't feed the mean/median/std either.
 
 Each bucket and the lifetime footer also show an **annualised rate that credits
 idle cash** — on every calendar day the capital is *not* in a trade it earns the
-configurable idle rate (`--idle-rate`, default 6% p.a. compounded monthly, set to
-your reserve-bank rate). So the return is the arb spread while trading and the
+configurable idle rate (`--idle-rate`, % p.a. compounded monthly, set to your
+reserve-bank rate: default 6%, then 6.25% from 2026-09-25). A dated schedule
+credits each idle day at the rate in force that day, and the headers show the
+current rate. So the return is the arb spread while trading and the
 idle rate otherwise:
 
 ```
@@ -406,7 +408,7 @@ the true take-home. On the demo dataset: 15.13% (with idle) → **8.91%** after 
 the arb-only after-tax figure is 5.77%. So the progression shown is:
 
 ```
-annualised 9.78%  →  +idle@6% 15.13%  →  net@41% 8.91%
+annualised 9.78%  →  +idle 15.13%  →  net@41% 8.91%
 ```
 
 All three coexist; nothing is replaced. Zero rates collapse every overlay back to

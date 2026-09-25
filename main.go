@@ -38,7 +38,7 @@ func main() {
 	loadDotEnv()
 
 	csvPath := flag.String("csv", "", "read cycles from a CSV file instead of the live API")
-	idlePct := flag.Float64("idle-rate", envFloat("FF_IDLE_RATE", 6.0), "annual % earned on idle cash (non-trading days); tracks the reserve bank rate")
+	idleRates := flag.String("idle-rate", envStr("FF_IDLE_RATE", defaultIdleRates), `annual % earned on idle cash (non-trading days); tracks the reserve bank rate. A flat "6.25" or a dated schedule "6,2026-09-25:6.25,..." (base rate, then date:rate changes)`)
 	taxPct := flag.Float64("tax-rate", envFloat("FF_TAX_RATE", 41.0), "marginal tax % applied to returns for the effective (net) figure")
 	sdaLimit := flag.Float64("sda-limit", envFloat("FF_SDA_LIMIT", 2_000_000), "annual Single Discretionary Allowance in rand (R2m since 8 Apr 2026)")
 	aitLimit := flag.Float64("ait-limit", envFloat("FF_AIT_LIMIT", envFloat("FF_FIA_LIMIT", 10_000_000)), "annual Approval for International Transfer allowance in rand (ex-FIA); SDA+AIT form the planning pool, both 0 hides it")
@@ -150,7 +150,13 @@ func main() {
 
 	now := ui.Today()
 	// Flags are percentages; analytics wants fractions.
-	rates := analytics.Rates{Idle: *idlePct / 100, Tax: *taxPct / 100}
+	idleSteps, err := parseIdleRates(*idleRates)
+	if err != nil {
+		fmt.Fprintln(os.Stderr, "bad --idle-rate:", err)
+		os.Exit(1)
+	}
+	rates := analytics.Rates{Tax: *taxPct / 100, IdleSteps: idleSteps}
+	rates.Idle = rates.IdleOn(now) // headline figure: the rate in force today
 
 	allow := analytics.Allowances{SDALimit: *sdaLimit, AITLimit: *aitLimit}
 	fees := analytics.Fees{Fixed: *feeFixed, Variable: *feeVarPct / 100, Tiers: defFees.Tiers}
@@ -334,6 +340,42 @@ func parseFeeTiers(s string) ([]analytics.FeeTier, error) {
 		tiers = append(tiers, analytics.FeeTier{Min: min, Rate: pct / 100})
 	}
 	return tiers, nil
+}
+
+// defaultIdleRates is the built-in idle-rate schedule: 6% until the 25bp hike
+// effective 2026-09-25. Add a date:rate entry each time the rate moves.
+const defaultIdleRates = "6,2026-09-25:6.25"
+
+// parseIdleRates parses "base,YYYY-MM-DD:rate,..." (percentages) into dated
+// steps. The first entry is the undated base rate. Later entries must be dated
+// and in ascending date order.
+func parseIdleRates(s string) ([]analytics.IdleStep, error) {
+	var steps []analytics.IdleStep
+	for i, part := range strings.Split(s, ",") {
+		part = strings.TrimSpace(part)
+		var from time.Time
+		rateStr := part
+		if i > 0 {
+			dr := strings.SplitN(part, ":", 2)
+			if len(dr) != 2 {
+				return nil, fmt.Errorf("%q is not YYYY-MM-DD:percent", part)
+			}
+			d, err := time.Parse("2006-01-02", strings.TrimSpace(dr[0]))
+			if err != nil {
+				return nil, fmt.Errorf("%q is not YYYY-MM-DD:percent", part)
+			}
+			if i > 1 && !d.After(steps[i-1].From) {
+				return nil, fmt.Errorf("dates must be ascending at %q", part)
+			}
+			from, rateStr = d, dr[1]
+		}
+		pct, err := strconv.ParseFloat(strings.TrimSpace(rateStr), 64)
+		if err != nil {
+			return nil, fmt.Errorf("%q is not a percentage", part)
+		}
+		steps = append(steps, analytics.IdleStep{From: from, Rate: pct / 100})
+	}
+	return steps, nil
 }
 
 // envStr reads a string env var, falling back to def when unset.

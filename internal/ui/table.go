@@ -299,7 +299,7 @@ func (m tableModel) view() string {
 	if m.filter.Value() == "" {
 		s := m.summary
 		footer += dimStyle.Render("   annualised ") + colourReturn(s.Annualised) +
-			dimStyle.Render(fmt.Sprintf("   +idle@%s ", percent(m.rates.Idle))) +
+			dimStyle.Render("   +idle ") +
 			colourReturn(s.AnnualisedWithIdle) +
 			dimStyle.Render(fmt.Sprintf("   net@%s ", percent(m.rates.Tax))) +
 			colourReturn(s.AnnualisedWithIdleAfterTax)

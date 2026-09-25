@@ -240,7 +240,7 @@ type cycleRowVM struct {
 
 type summaryVM struct {
 	Annualised, WithIdle, Net float64
-	IdleLabel, TaxLabel       string // e.g. "6.00%", "41.00%"
+	TaxLabel                  string // e.g. "41.00%"
 }
 
 // cycleColumns builds the header links. Clicking a new column keeps the
@@ -318,7 +318,6 @@ type analyticsVM struct {
 	Grans      []granVM
 	Scope      string // "active only" / "incl. dead buckets"
 	DeadURL    string // toggle link
-	IdleHdr    string // "+Idle@6%"
 	NetHdr     string // "Net@41%"
 	IdlePct    string // "6.00%"
 	TaxPct     string // "41.00%"

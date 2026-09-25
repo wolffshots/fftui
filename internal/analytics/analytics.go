@@ -26,9 +26,55 @@ const PartialDayThreshold = 20
 // Rates configures the two overlays on the raw arb figures: Idle is the annual
 // rate earned on non-trading days; Tax is the marginal rate on all returns
 // (both arb profit and idle interest). Both are fractional (0.06, 0.41).
+// IdleSteps optionally dates changes to the idle rate as the reserve bank moves
+// it: each idle day then earns the step in force that day, and Idle is only the
+// headline (current) rate.
 type Rates struct {
-	Idle float64
-	Tax  float64
+	Idle      float64
+	Tax       float64
+	IdleSteps []IdleStep // ascending From; empty means Idle applies to every day
+}
+
+// IdleStep is an idle rate in force from From (inclusive) until the next step.
+// A zero From means since the beginning.
+type IdleStep struct {
+	From time.Time
+	Rate float64
+}
+
+// IdleOn returns the idle rate in force on day t.
+func (r Rates) IdleOn(t time.Time) float64 {
+	rate := r.Idle
+	for _, s := range r.IdleSteps {
+		if t.Before(s.From) {
+			break
+		}
+		rate = s.Rate
+	}
+	return rate
+}
+
+// idleOver is the idle rate for the idle (non-trading) days in [from, to]: the
+// mean of each idle day's rate, so a period straddling a rate change weights
+// each rate by the idle days it covered. With no idle days it is the rate on to.
+// ponytail: arithmetic mean of nominal rates, not the exact compounded blend;
+// the error is second order (well under 0.01pp for a 25bp step).
+func (r Rates) idleOver(trading map[int64]struct{}, from, to time.Time) float64 {
+	if len(r.IdleSteps) == 0 {
+		return r.Idle
+	}
+	var sum float64
+	n := 0
+	for d := from; !d.After(to); d = d.AddDate(0, 0, 1) {
+		if _, ok := trading[d.Unix()/86400]; !ok {
+			sum += r.IdleOn(d)
+			n++
+		}
+	}
+	if n == 0 {
+		return r.IdleOn(to)
+	}
+	return sum / float64(n)
 }
 
 // Granularity selects the calendar bucket size for Buckets.
@@ -196,10 +242,11 @@ func overlapDays(as, ae, bs, be time.Time) int {
 	return dayCount(s, e)
 }
 
-// distinctTradingDays counts the calendar days within [from, to] covered by at
-// least one cycle. Overlapping cycles and same-day rollovers (one cycle ending
-// the day the next starts) count each day once, so idle days aren't undercounted.
-func distinctTradingDays(cs []model.Cycle, from, to time.Time) int {
+// tradingDaySet returns the calendar days (Unix day numbers) within [from, to]
+// covered by at least one cycle. Overlapping cycles and same-day rollovers (one
+// cycle ending the day the next starts) count each day once, so idle days
+// aren't undercounted.
+func tradingDaySet(cs []model.Cycle, from, to time.Time) map[int64]struct{} {
 	days := map[int64]struct{}{}
 	for _, c := range cs {
 		s, e := c.StartDate, c.EndDate
@@ -213,7 +260,7 @@ func distinctTradingDays(cs []model.Cycle, from, to time.Time) int {
 			days[d.Unix()/86400] = struct{}{}
 		}
 	}
-	return len(days)
+	return days
 }
 
 // Lifetime computes the whole-history roll-up. calendarDays is measured as
@@ -234,7 +281,9 @@ func Lifetime(cs []model.Cycle, r Rates) Summary {
 			last = c.EndDate
 		}
 	}
-	tradingDays := distinctTradingDays(sorted, first, last)
+	trading := tradingDaySet(sorted, first, last)
+	tradingDays := len(trading)
+	idle := r.idleOver(trading, first, last)
 	days := int(last.Sub(first).Hours()/24 + 0.5)
 	g := compoundGrowth(sorted)
 	gTax := compoundGrowthTaxed(sorted, r.Tax)
@@ -245,9 +294,9 @@ func Lifetime(cs []model.Cycle, r Rates) Summary {
 		Compound:                   g,
 		CalendarDays:               days,
 		Annualised:                 annualise(g, days),
-		AnnualisedWithIdle:         annualiseWithIdle(g, tradingDays, days, r.Idle),
+		AnnualisedWithIdle:         annualiseWithIdle(g, tradingDays, days, idle),
 		AnnualisedAfterTax:         annualise(gTax, days),
-		AnnualisedWithIdleAfterTax: annualiseWithIdle(gTax, tradingDays, days, r.Idle*(1-r.Tax)),
+		AnnualisedWithIdleAfterTax: annualiseWithIdle(gTax, tradingDays, days, idle*(1-r.Tax)),
 		TradingDays:                tradingDays,
 	}
 }
@@ -307,7 +356,10 @@ func Buckets(cs []model.Cycle, gran Granularity, now time.Time, includeDead bool
 
 		days := dayCount(start, windowEnd)
 		fullDays := dayCount(start, end) // whole calendar span, ignoring `now`
-		tradingDays := distinctTradingDays(sorted, start, windowEnd)
+		trading := tradingDaySet(sorted, start, windowEnd)
+		tradingDays := len(trading)
+		// Floor idle days run to the period end, so they pick up later rates.
+		idle, idleFloor := r.idleOver(trading, start, windowEnd), r.idleOver(trading, start, end)
 		out = append(out, Bucket{
 			Label:                      periodLabel(gran, p),
 			Start:                      start,
@@ -317,12 +369,12 @@ func Buckets(cs []model.Cycle, gran Granularity, now time.Time, includeDead bool
 			Compound:                   g,
 			CalendarDays:               days,
 			Annualised:                 annualise(g, days),
-			AnnualisedWithIdle:         annualiseWithIdle(g, tradingDays, days, r.Idle),
+			AnnualisedWithIdle:         annualiseWithIdle(g, tradingDays, days, idle),
 			AnnualisedAfterTax:         annualise(gTax, days),
-			AnnualisedWithIdleAfterTax: annualiseWithIdle(gTax, tradingDays, days, r.Idle*(1-r.Tax)),
+			AnnualisedWithIdleAfterTax: annualiseWithIdle(gTax, tradingDays, days, idle*(1-r.Tax)),
 			// Floor: same blend but over the full period (remainder = idle).
-			AnnualisedFloor:         annualiseWithIdle(g, tradingDays, fullDays, r.Idle),
-			AnnualisedFloorAfterTax: annualiseWithIdle(gTax, tradingDays, fullDays, r.Idle*(1-r.Tax)),
+			AnnualisedFloor:         annualiseWithIdle(g, tradingDays, fullDays, idleFloor),
+			AnnualisedFloorAfterTax: annualiseWithIdle(gTax, tradingDays, fullDays, idleFloor*(1-r.Tax)),
 			TradingDays:             tradingDays,
 			Partial:                 days < PartialDayThreshold,
 			InProgress:              inProgress,

@@ -100,7 +100,7 @@ func (m analyticsModel) renderContent() string {
 		wIdle   = 11
 		wNet    = 11
 	)
-	idleHdr := fmt.Sprintf("+Idle@%.0f%%", m.rates.Idle*100)
+	idleHdr := "+Idle%"
 	netHdr := fmt.Sprintf("Net@%.0f%%", m.rates.Tax*100)
 	header := lipgloss.NewStyle().Foreground(accent).Bold(true).Render(
 		pad("Period", wPeriod) + rightPad("Cyc", wCyc) + rightPad("Profit R", wProfit) +
@@ -137,7 +137,7 @@ func (m analyticsModel) renderContent() string {
 	}
 	b.WriteString("\n")
 	strip := varianceLine(m.gran.String()+" variance", v) + "\n" +
-		varianceLine(fmt.Sprintf("+idle@%.0f%%", m.rates.Idle*100), analytics.VarianceWithIdle(buckets)) + "\n" +
+		varianceLine("+idle", analytics.VarianceWithIdle(buckets)) + "\n" +
 		varianceLine(fmt.Sprintf("net@%.0f%% (after tax)", m.rates.Tax*100), analytics.VarianceWithIdleAfterTax(buckets))
 	b.WriteString(boxStyle.Render(strip) + "\n")
 	b.WriteString(dimStyle.Render(fmt.Sprintf("scope: %s (a to toggle) · stats over %d full buckets · idle %s/yr on non-trading days · tax %s on returns",

@@ -70,7 +70,6 @@ func (s *Server) handleCycles(w http.ResponseWriter, r *http.Request) {
 			Annualised: sum.Annualised,
 			WithIdle:   sum.AnnualisedWithIdle,
 			Net:        sum.AnnualisedWithIdleAfterTax,
-			IdleLabel:  format.Percent(s.opts.Rates.Idle),
 			TaxLabel:   format.Percent(s.opts.Rates.Tax),
 		}
 	}
@@ -178,7 +177,6 @@ func (s *Server) handleAnalytics(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	vm.IdleHdr = fmt.Sprintf("+Idle@%.0f%%", rates.Idle*100)
 	vm.NetHdr = fmt.Sprintf("Net@%.0f%%", rates.Tax*100)
 	vm.IdlePct = format.Percent(rates.Idle)
 	vm.TaxPct = format.Percent(rates.Tax)
@@ -207,7 +205,7 @@ func (s *Server) handleAnalytics(w http.ResponseWriter, r *http.Request) {
 	}
 	vm.Variances = []varianceVM{
 		varLine("variance", gran.String()+" variance", v),
-		varLine("variance-idle", fmt.Sprintf("+idle@%.0f%%", rates.Idle*100), analytics.VarianceWithIdle(buckets)),
+		varLine("variance-idle", "+idle", analytics.VarianceWithIdle(buckets)),
 		varLine("variance-net", fmt.Sprintf("net@%.0f%% (after tax)", rates.Tax*100), analytics.VarianceWithIdleAfterTax(buckets)),
 	}
 

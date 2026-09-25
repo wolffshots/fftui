@@ -349,3 +349,33 @@ func TestScenarioInput(t *testing.T) {
 		t.Errorf("an unknown slug should default to now, got %v", got)
 	}
 }
+
+// TestIdleRateSchedule: each idle day earns the rate in force that day, and the
+// floor's future idle days pick up a rate change dated after now.
+func TestIdleRateSchedule(t *testing.T) {
+	cs := []model.Cycle{mkCycle(t, "A", "2025-01-01", "2025-01-05", 100000, 101000)}
+	hike := time.Date(2025, 7, 1, 0, 0, 0, 0, time.UTC)
+	r := Rates{Tax: 0.41, IdleSteps: []IdleStep{{Rate: 0.06}, {From: hike, Rate: 0.0625}}}
+
+	now := time.Date(2025, 12, 31, 0, 0, 0, 0, time.UTC)
+	for _, b := range Buckets(cs, Month, now, true, r) {
+		if b.Count > 0 {
+			continue
+		}
+		want := 6.0
+		if !b.Start.Before(hike) {
+			want = 6.25
+		}
+		assertClose(t, "dead +idle % ("+b.Label+")", pct(b.AnnualisedWithIdle), want, 0.001)
+	}
+
+	// Before the hike: elapsed idle days are all 6%, but the floor's remainder
+	// straddles the hike, so it beats the flat-6% floor.
+	early := time.Date(2025, 3, 31, 0, 0, 0, 0, time.UTC)
+	y := Buckets(cs, Year, early, false, r)[0]
+	flat := Buckets(cs, Year, early, false, Rates{Idle: 0.06, Tax: 0.41})[0]
+	assertClose(t, "elapsed +idle unchanged", y.AnnualisedWithIdle, flat.AnnualisedWithIdle, 1e-12)
+	if !(y.AnnualisedFloor > flat.AnnualisedFloor) {
+		t.Errorf("floor should pick up the dated hike: got %.6f, flat %.6f", y.AnnualisedFloor, flat.AnnualisedFloor)
+	}
+}

@@ -6,6 +6,7 @@ import (
 	"runtime"
 	"strings"
 	"testing"
+	"time"
 )
 
 func TestApplyDotEnv(t *testing.T) {
@@ -178,6 +179,27 @@ func TestParseFeeTiers(t *testing.T) {
 	}
 	for _, bad := range []string{"", "100000", "abc:35", "100000:x", "200000:30,100000:35"} {
 		if _, err := parseFeeTiers(bad); err == nil {
+			t.Errorf("expected error for %q", bad)
+		}
+	}
+}
+
+func TestParseIdleRates(t *testing.T) {
+	steps, err := parseIdleRates(defaultIdleRates)
+	if err != nil {
+		t.Fatalf("parse: %v", err)
+	}
+	hike := time.Date(2026, 9, 25, 0, 0, 0, 0, time.UTC)
+	if len(steps) != 2 || !steps[0].From.IsZero() || steps[0].Rate != 0.06 ||
+		!steps[1].From.Equal(hike) || steps[1].Rate != 0.0625 {
+		t.Errorf("unexpected steps: %+v", steps)
+	}
+	if steps, err := parseIdleRates("7"); err != nil || len(steps) != 1 || steps[0].Rate != 0.07 {
+		t.Errorf("flat rate: %+v, %v", steps, err)
+	}
+	for _, bad := range []string{"", "x", "6,6.25", "6,2026-13-01:6.25", "6,2026-09-25:x",
+		"6,2026-09-25:6.25,2026-09-01:6.5"} {
+		if _, err := parseIdleRates(bad); err == nil {
 			t.Errorf("expected error for %q", bad)
 		}
 	}

@@ -39,7 +39,9 @@ func Bootstrap(cs []model.Cycle, r Rates, resamples int) BootstrapResult {
 		}
 	}
 	days := int(last.Sub(first).Hours()/24 + 0.5)
-	tradingDays := distinctTradingDays(sorted, first, last)
+	trading := tradingDaySet(sorted, first, last)
+	tradingDays := len(trading)
+	idle := r.idleOver(trading, first, last)
 	returns := make([]float64, len(sorted))
 	for i, c := range sorted {
 		returns[i] = c.Return()
@@ -56,7 +58,7 @@ func Bootstrap(cs []model.Cycle, r Rates, resamples int) BootstrapResult {
 			gTax *= 1 + ret*(1-r.Tax)
 		}
 		arb[i] = annualise(g-1, days)
-		net[i] = annualiseWithIdle(gTax-1, tradingDays, days, r.Idle*(1-r.Tax))
+		net[i] = annualiseWithIdle(gTax-1, tradingDays, days, idle*(1-r.Tax))
 	}
 	sort.Float64s(arb)
 	sort.Float64s(net)
