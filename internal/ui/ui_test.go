@@ -796,6 +796,7 @@ func TestTableKeepsSelectionOnRefresh(t *testing.T) {
 	m = send(m, rune1('1'))
 	m = send(m, rune1('j'))
 	m = send(m, rune1('j'))
+	m = send(m, renderMsg{}) // arrows apply once per frame
 	sel, ok := m.table.selectedCycle()
 	if !ok {
 		t.Fatal("no selection to preserve")
@@ -825,5 +826,79 @@ func TestNoMarkerOverErrorScreen(t *testing.T) {
 	m = send(m, fetchErrMsg{err: errors.New("background boom"), background: true})
 	if m.refreshErr != nil || strings.Contains(m.renderTabs(), "refresh failed") {
 		t.Fatal("background failure stacked the marker on the error screen")
+	}
+}
+
+// TestScrollFloodCoalesces: a wheel flood of arrow keys must not re-render per
+// key. View stays cached between keys, one renderMsg applies the summed
+// (clamped) move, and enter after a burst opens the row scrolled to.
+func TestScrollFloodCoalesces(t *testing.T) {
+	down := tea.KeyMsg{Type: tea.KeyDown}
+	up := tea.KeyMsg{Type: tea.KeyUp}
+
+	m := testModel(t)
+	before := m.View()
+	for i := 0; i < 5; i++ {
+		mm, cmd := m.Update(down)
+		m = mm.(RootModel)
+		if (cmd != nil) != (i == 0) {
+			t.Fatalf("key %d: only the first key of a frame should arm the tick", i)
+		}
+		if !m.view.ok || m.View() != before {
+			t.Fatalf("key %d: view re-rendered before the frame tick", i)
+		}
+	}
+	m = send(m, up)
+	m = send(m, renderMsg{})
+	if got := m.table.tbl.Cursor(); got != 4 {
+		t.Fatalf("table cursor = %d after 5 down + 1 up, want 4", got)
+	}
+	if m.view.ok {
+		t.Fatal("frame tick left the view cache valid")
+	}
+	want := m.table.visible[4].Code
+
+	// A burst far past the end clamps to the last row.
+	for i := 0; i < 1000; i++ {
+		m = send(m, down)
+	}
+	m = send(m, renderMsg{})
+	if got, last := m.table.tbl.Cursor(), len(m.table.visible)-1; got != last {
+		t.Fatalf("table cursor = %d after a long burst, want %d", got, last)
+	}
+
+	// Enter flushes the pending burst before it opens a row.
+	m = send(m, renderMsg{})
+	for i := 0; i < len(m.table.visible)-1-4; i++ {
+		m = send(m, up)
+	}
+	m = send(m, tea.KeyMsg{Type: tea.KeyEnter})
+	if m.active != viewDetail || m.detail.cycle.Code != want {
+		t.Fatalf("enter opened %q (view %d), want %q in detail", m.detail.cycle.Code, m.active, want)
+	}
+
+	// Analytics: the viewport offset moves by the summed delta. A short
+	// terminal makes the page taller than the viewport.
+	m = send(m, rune1('2'))
+	m = send(m, tea.WindowSizeMsg{Width: 120, Height: 20})
+	before = m.View()
+	for i := 0; i < 7; i++ {
+		m = send(m, down)
+	}
+	m = send(m, up)
+	if !m.view.ok || m.View() != before {
+		t.Fatal("analytics view re-rendered before the frame tick")
+	}
+	m = send(m, renderMsg{})
+	if got := m.analytics.vp.YOffset; got != 6 {
+		t.Fatalf("analytics YOffset = %d after 7 down + 1 up, want 6", got)
+	}
+
+	// Filter input still receives j/k as text.
+	m = send(m, rune1('1'))
+	m = send(m, rune1('/'))
+	m = send(m, rune1('j'))
+	if m.table.filter.Value() != "j" || m.scrollDelta != 0 {
+		t.Fatalf("filter got %q, delta %d; typing must not scroll", m.table.filter.Value(), m.scrollDelta)
 	}
 }

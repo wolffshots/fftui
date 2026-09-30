@@ -9,6 +9,7 @@ import (
 	"github.com/charmbracelet/bubbles/help"
 	"github.com/charmbracelet/bubbles/spinner"
 	"github.com/charmbracelet/bubbles/textinput"
+	"github.com/charmbracelet/bubbles/viewport"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 
@@ -50,6 +51,18 @@ type fetchErrMsg struct {
 // chains: a tick armed before a pause/resume carries a stale sequence number
 // and is dropped instead of re-arming alongside the fresh chain.
 type autoRefreshMsg struct{ seq int }
+
+// renderMsg fires one frame after the first coalesced arrow key and applies
+// the summed scroll (see queueScroll).
+type renderMsg struct{}
+
+// viewCache memoises View. It sits behind a pointer because View has a value
+// receiver: the pointer survives the copies Update returns, so one View call
+// can fill it for the next.
+type viewCache struct {
+	s  string
+	ok bool
+}
 
 // Today lives in internal/data; aliased here so existing callers (main.go)
 // stay unchanged.
@@ -104,6 +117,14 @@ type RootModel struct {
 
 	width  int
 	height int
+
+	// A free-spinning mouse wheel reaches the alternate screen as hundreds of
+	// arrow keys a second. Each one only adds to scrollDelta, and one renderMsg
+	// per frame applies the sum, so the view renders once per frame instead of
+	// once per key.
+	scrollDelta   int
+	scrollPending bool // a renderMsg is in flight
+	view          *viewCache
 }
 
 // New builds the root model. rates carries the idle-cash rate and tax rate used
@@ -147,6 +168,7 @@ func New(svc *data.Service, now time.Time, rates analytics.Rates, allow analytic
 		charts:       newChartsModel(now, rates),
 		live:         newLiveModel(),
 		returns:      newReturnsModel(now, fees),
+		view:         &viewCache{},
 	}
 }
 
@@ -208,7 +230,21 @@ func reloadCmd(svc *data.Service) tea.Cmd {
 }
 
 func (m RootModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
+	if k, ok := msg.(tea.KeyMsg); ok {
+		if d := m.scrollStep(k); d != 0 {
+			return m.queueScroll(d)
+		}
+	}
+	// Apply queued scroll first, so that for example enter opens the row the
+	// user scrolled to. Every message from here on may change the view.
+	m.flushScroll()
+	m.view.ok = false
+
 	switch msg := msg.(type) {
+	case renderMsg:
+		m.scrollPending = false
+		return m, nil
+
 	case tea.WindowSizeMsg:
 		m.width, m.height = msg.Width, msg.Height
 		m.help.Width = msg.Width
@@ -412,6 +448,72 @@ func (m RootModel) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	return m.forward(msg)
 }
 
+// scrollStep returns +1 or -1 for a down or up key, or 0 when the key takes
+// the normal path: another key, or a text input that captures it.
+func (m RootModel) scrollStep(k tea.KeyMsg) int {
+	if m.editingWindow || (m.active == viewTable && m.table.filtering) {
+		return 0
+	}
+	switch {
+	case keyMatches(k, m.keys.Down):
+		return 1
+	case keyMatches(k, m.keys.Up):
+		return -1
+	}
+	return 0
+}
+
+// queueScroll adds one arrow key to the pending delta and arms the frame tick
+// that applies it. Charts has nothing to scroll, so there the key is dropped
+// and the view cache stays valid.
+func (m RootModel) queueScroll(d int) (tea.Model, tea.Cmd) {
+	if m.active == viewCharts {
+		return m, nil
+	}
+	m.scrollDelta += d
+	if m.scrollPending {
+		return m, nil
+	}
+	m.scrollPending = true
+	return m, tea.Tick(16*time.Millisecond, func(time.Time) tea.Msg { return renderMsg{} })
+}
+
+// flushScroll applies the pending delta to the active view in one move.
+// ponytail: net delta per frame, so up-then-down against an edge within one
+// frame lands off by the clamped part; clamp per key if that ever shows.
+func (m *RootModel) flushScroll() {
+	n := m.scrollDelta
+	if n == 0 {
+		return
+	}
+	m.scrollDelta = 0
+	var vp *viewport.Model
+	switch m.active {
+	case viewTable:
+		if n > 0 {
+			m.table.tbl.MoveDown(n)
+		} else {
+			m.table.tbl.MoveUp(-n)
+		}
+		return
+	case viewAnalytics:
+		vp = &m.analytics.vp
+	case viewDetail:
+		vp = &m.detail.vp
+	case viewLive:
+		vp = &m.live.vp
+	case viewReturns:
+		vp = &m.returns.vp
+	default:
+		return
+	}
+	if n > 0 {
+		vp.ScrollDown(n)
+	} else {
+		vp.ScrollUp(-n)
+	}
+}
+
 // forward routes a message to the active sub-view.
 func (m RootModel) forward(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch m.active {
@@ -473,7 +575,16 @@ func (m RootModel) renderStatusBar() string {
 	return renderStatusBar(m.client, m.market, m.width)
 }
 
+// View returns the frame cached since the last state change. Bubble Tea calls
+// it after every message, and most messages in a wheel flood change nothing.
 func (m RootModel) View() string {
+	if !m.view.ok {
+		m.view.s, m.view.ok = m.render(), true
+	}
+	return m.view.s
+}
+
+func (m RootModel) render() string {
 	if m.width == 0 {
 		return "loading…"
 	}

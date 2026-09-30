@@ -33,20 +33,27 @@ func newReturnsModel(now time.Time, fees analytics.Fees) returnsModel {
 	return returnsModel{vp: viewport.New(0, 0), now: now, fees: fees}
 }
 
-func (m *returnsModel) setCycles(cs []model.Cycle) { m.cycles = cs }
+// The setters rebuild the content, so view never recomputes it per key.
+func (m *returnsModel) setCycles(cs []model.Cycle) {
+	m.cycles = cs
+	m.vp.SetContent(m.render())
+}
 
 func (m *returnsModel) setData(c *model.ClientStatus, mk, year *model.MarketConditions) {
 	m.client, m.market, m.marketYear = c, mk, year
+	m.vp.SetContent(m.render())
 }
 
 func (m *returnsModel) setSize(w, h int) {
 	m.width, m.height = w, h
 	m.vp.Width, m.vp.Height = w, h
+	m.vp.SetContent(m.render())
 }
 
 func (m returnsModel) update(msg tea.Msg, k keyMap) (returnsModel, tea.Cmd) {
 	if key, ok := msg.(tea.KeyMsg); ok && keyMatches(key, k.SubTab) {
 		m.scenario = m.nextScenario()
+		m.vp.SetContent(m.render())
 		m.vp.GotoTop()
 		return m, nil
 	}
@@ -107,11 +114,7 @@ func (m returnsModel) scenarioTabs() string {
 	return strip
 }
 
-func (m returnsModel) view() string {
-	vp := m.vp
-	vp.SetContent(m.render())
-	return vp.View()
-}
+func (m returnsModel) view() string { return m.vp.View() }
 
 // spread resolves the spread to project at, for the active scenario.
 func (m returnsModel) spread() (frac float64, source string, ok bool) {

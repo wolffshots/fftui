@@ -20,16 +20,19 @@ type chartsModel struct {
 	rates  analytics.Rates
 	width  int
 	height int
+	out    string // rendered by the setters; view runs after every message
 }
 
 func newChartsModel(now time.Time, rates analytics.Rates) chartsModel {
 	return chartsModel{now: now, rates: rates}
 }
 
-func (m *chartsModel) setCycles(cs []model.Cycle) { m.cycles = cs }
-func (m *chartsModel) setSize(w, h int)           { m.width, m.height = w, h }
+func (m *chartsModel) setCycles(cs []model.Cycle) { m.cycles = cs; m.out = m.render() }
+func (m *chartsModel) setSize(w, h int)           { m.width, m.height = w, h; m.out = m.render() }
 
-func (m chartsModel) view() string {
+func (m chartsModel) view() string { return m.out }
+
+func (m chartsModel) render() string {
 	if len(m.cycles) == 0 {
 		return dimStyle.Render("no data")
 	}

@@ -43,12 +43,14 @@ func newAnalyticsModel(now time.Time, rates analytics.Rates, allow analytics.All
 func (m *analyticsModel) setCycles(cs []model.Cycle) {
 	m.cycles = cs
 	m.boot = analytics.Bootstrap(cs, m.rates, 10_000)
+	m.vp.SetContent(m.renderContent())
 }
 
 func (m *analyticsModel) setSize(w, h int) {
 	m.width, m.height = w, h
 	m.vp.Width = w
 	m.vp.Height = h
+	m.vp.SetContent(m.renderContent())
 }
 
 func (m analyticsModel) update(msg tea.Msg, k keyMap) analyticsModel {
@@ -56,10 +58,12 @@ func (m analyticsModel) update(msg tea.Msg, k keyMap) analyticsModel {
 		switch {
 		case keyMatches(key, k.SubTab):
 			m.gran = (m.gran + 1) % analytics.GranularityCount
+			m.vp.SetContent(m.renderContent())
 			m.vp.GotoTop()
 			return m
 		case keyMatches(key, k.ToggleDead):
 			m.includeDead = !m.includeDead
+			m.vp.SetContent(m.renderContent())
 			m.vp.GotoTop()
 			return m
 		}
@@ -70,13 +74,9 @@ func (m analyticsModel) update(msg tea.Msg, k keyMap) analyticsModel {
 	return m
 }
 
-// view renders the content into the scrolling viewport. The viewport copy keeps
-// m's scroll offset; SetContent clamps it if the content shrank.
-func (m analyticsModel) view() string {
-	vp := m.vp
-	vp.SetContent(m.renderContent())
-	return vp.View()
-}
+// view shows the viewport. The content is built when its inputs change
+// (setCycles, setSize, tab, a), never per key: arrows only scroll.
+func (m analyticsModel) view() string { return m.vp.View() }
 
 func (m analyticsModel) renderContent() string {
 	buckets := analytics.Buckets(m.cycles, m.gran, m.now, m.includeDead, m.rates)
