@@ -77,6 +77,15 @@ func colourReturn(frac float64) string {
 	return positiveStyle.Render(s)
 }
 
+// colourSpread styles a market spread (percent units) green/red by sign.
+func colourSpread(pct float64) string {
+	s := spreadFmt(pct)
+	if pct < 0 {
+		return negativeStyle.Render(s)
+	}
+	return positiveStyle.Render(s)
+}
+
 // colourMoney styles a ZAR amount green/red by sign.
 func colourMoney(v float64) string {
 	s := money(v)

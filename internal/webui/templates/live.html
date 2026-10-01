@@ -15,7 +15,7 @@
 {{with .Market}}
 <h2>Market conditions</h2>
 <dl class="kv">
-  <dt>{{tip "spread" "Spread"}}</dt><dd class="pos">{{spreadFmt .Spread}}</dd>
+  <dt>{{tip "spread" "Spread"}}</dt><dd class="{{signClass .Spread}}">{{spreadFmt .Spread}}</dd>
   <dt>Local price</dt><dd>{{printf "%.4f" .LocalPrice}}</dd>
   <dt>Offshore price</dt><dd>{{printf "%.4f" .OffshorePrice}}</dd>
   <dt>Exchange rate</dt><dd>{{printf "%.4f" .ExchangeRate}}</dd>

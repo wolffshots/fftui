@@ -511,7 +511,7 @@ func (s *Server) handleReturns(w http.ResponseWriter, r *http.Request) {
 
 	in := analytics.ScenarioInput{Cycles: snap.Cycles, Now: snap.Now, Fees: s.opts.Fees}
 	if snap.Market != nil {
-		in.LiveSpread = snap.Market.Current.Spread
+		in.Live, in.LiveSpread = true, snap.Market.Current.Spread
 	}
 	if snap.MarketYear != nil {
 		in.History, in.HistoryDays = snap.MarketYear.History, snap.MarketYear.Period

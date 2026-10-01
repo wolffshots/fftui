@@ -281,6 +281,7 @@ func TestScenarioInput(t *testing.T) {
 		Cycles:      []model.Cycle{{StartDate: now.AddDate(0, 0, -30), ZarIn: 200_000, NetProfit: 1_000}},
 		Now:         now,
 		Fees:        DefaultFees(),
+		Live:        true,
 		LiveSpread:  0.80,
 		History:     hist,
 		HistoryDays: 30,
@@ -308,6 +309,21 @@ func TestScenarioInput(t *testing.T) {
 	}
 	if len(in.Available()) != 4 {
 		t.Errorf("full data should offer every scenario, got %v", in.Available())
+	}
+
+	// A flat or inverted market is still a live reading: "now" and "lower"
+	// project the loss instead of falling back to the realised mean.
+	flat := in
+	flat.LiveSpread = -0.02
+	flat.History = append([]model.MarketPoint{{Spread: -0.02}}, hist[1:]...)
+	for _, s := range []Scenario{ScenarioNow, ScenarioLower} {
+		got, _, ok := flat.Spread(s)
+		if !ok || math.Abs(got+0.0002) > 1e-9 {
+			t.Errorf("%v at a -0.02%% market = %g (ok=%v), want -0.0002", s, got, ok)
+		}
+	}
+	if net := flat.Fees.At(now).Net(-0.0002, 300_000); net >= 0 {
+		t.Errorf("a -0.02%% spread should project a loss, got %g", net)
 	}
 
 	// No history and no live feed: only the realised figure survives.

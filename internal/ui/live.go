@@ -85,7 +85,7 @@ func (m liveModel) render() string {
 	if m.market != nil {
 		cur := m.market.Current
 		b.WriteString(titleStyle.Render("Market conditions") + "\n")
-		b.WriteString(row("Spread", positiveStyle.Render(spreadFmt(cur.Spread))) + "\n")
+		b.WriteString(row("Spread", colourSpread(cur.Spread)) + "\n")
 		b.WriteString(row("Local price", valueStyle.Render(fmt.Sprintf("%.4f", cur.LocalPrice))) + "\n")
 		b.WriteString(row("Offshore price", valueStyle.Render(fmt.Sprintf("%.4f", cur.OffshorePrice))) + "\n")
 		b.WriteString(row("Exchange rate", valueStyle.Render(fmt.Sprintf("%.4f", cur.ExchangeRate))) + "\n")

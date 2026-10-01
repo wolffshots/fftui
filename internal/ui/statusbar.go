@@ -34,7 +34,7 @@ func renderStatusBar(client *model.ClientStatus, market *model.MarketConditions,
 		parts = append(parts, seg)
 	}
 	if market != nil {
-		parts = append(parts, dimStyle.Render("spread ")+positiveStyle.Render(spreadFmt(market.Current.Spread)))
+		parts = append(parts, dimStyle.Render("spread ")+colourSpread(market.Current.Spread))
 	}
 	if client != nil && client.FundsUpdated != "" {
 		parts = append(parts, dimStyle.Render(client.FundsUpdated))

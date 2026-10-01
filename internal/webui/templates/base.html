@@ -14,7 +14,7 @@
   <span class="val">{{.Status.Label}}</span>
   {{- if .Status.Invested}} <span class="dim">· invested</span> <span class="val">{{money .Status.Invested}}</span>{{end}}
   {{- end}}
-  {{- if .Status.HasSpread}} <span class="dim">spread</span> <span class="pos">{{spreadFmt .Status.Spread}}</span>{{end}}
+  {{- if .Status.HasSpread}} <span class="dim">spread</span> <span class="{{signClass .Status.Spread}}">{{spreadFmt .Status.Spread}}</span>{{end}}
   {{- if .Status.Updated}} <span class="dim">{{.Status.Updated}}</span>{{end}}
 </div>
 {{end}}

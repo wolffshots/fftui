@@ -67,7 +67,7 @@ func (m returnsModel) update(msg tea.Msg, k keyMap) (returnsModel, tea.Cmd) {
 func (m returnsModel) input() analytics.ScenarioInput {
 	in := analytics.ScenarioInput{Cycles: m.cycles, Now: m.now, Fees: m.fees}
 	if m.market != nil {
-		in.LiveSpread = m.market.Current.Spread
+		in.Live, in.LiveSpread = true, m.market.Current.Spread
 	}
 	if m.marketYear != nil {
 		in.History, in.HistoryDays = m.marketYear.History, m.marketYear.Period

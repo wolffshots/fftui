@@ -63,7 +63,8 @@ type ScenarioInput struct {
 	Cycles      []model.Cycle
 	Now         time.Time
 	Fees        Fees
-	LiveSpread  float64             // market.Current.Spread, percent units; 0 means no live feed
+	Live        bool                // a market feed is present; false in CSV mode
+	LiveSpread  float64             // market.Current.Spread, percent units; zero or negative is a real reading
 	History     []model.MarketPoint // 365d history; the 7d Market series is too short for a 30d window
 	HistoryDays int                 // that history's period, in days
 	Invested    float64             // the in-flight cycle's capital; 0 falls back to the latest cycle
@@ -79,7 +80,7 @@ func (in ScenarioInput) Spread(s Scenario) (frac float64, source string, ok bool
 	switch s {
 	case ScenarioLower, ScenarioHigher:
 		low, high, ok := SpreadRange(in.History, in.HistoryDays, ScenarioWindow)
-		if !ok || low <= 0 {
+		if !ok {
 			return 0, "", false
 		}
 		if s == ScenarioLower {
@@ -95,7 +96,7 @@ func (in ScenarioInput) Spread(s Scenario) (frac float64, source string, ok bool
 		return avg, fmt.Sprintf("mean of the %d cycles you traded in the last year, backed out through the fee model", n), true
 	}
 
-	if in.LiveSpread > 0 {
+	if in.Live {
 		return in.LiveSpread / 100, "live market feed", true
 	}
 	avg, n := realised()
