@@ -1,7 +1,7 @@
 # Cross-compiled with Go rather than emulated, so a multi-arch build needs no
 # QEMU: the build stage always runs on the builder's native platform and
 # GOOS/GOARCH come from the target.
-FROM --platform=$BUILDPLATFORM golang:1.24-alpine AS build
+FROM --platform=$BUILDPLATFORM golang:1.26-alpine AS build
 
 WORKDIR /src
 COPY go.mod go.sum ./

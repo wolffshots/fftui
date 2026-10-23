@@ -1,6 +1,6 @@
 module github.com/wolffshots/fftui
 
-go 1.24.2
+go 1.26.10
 
 require (
 	github.com/charmbracelet/bubbles v1.0.0
