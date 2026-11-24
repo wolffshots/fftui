@@ -159,6 +159,21 @@ func TestResolvePasswordCmd(t *testing.T) {
 		t.Errorf("FF_PASSWORD = %q, want explicit (command should not override)", got)
 	}
 
+	// A double-quoted argument reaches the shell intact. cmd.exe echoes the
+	// quotes; sh strips them. Before shellCommand, Windows got \"a  b\".
+	t.Setenv("FF_PASSWORD", "")
+	t.Setenv("FF_PASSWORD_CMD", `echo "a  b"`)
+	if err := resolvePasswordCmd(); err != nil {
+		t.Fatalf("resolvePasswordCmd: %v", err)
+	}
+	want := "a  b"
+	if runtime.GOOS == "windows" {
+		want = `"a  b"`
+	}
+	if got := os.Getenv("FF_PASSWORD"); got != want {
+		t.Errorf("FF_PASSWORD = %q, want %q", got, want)
+	}
+
 	// Failure surfaces an error ("exit 1" works for both sh -c and cmd /C).
 	t.Setenv("FF_PASSWORD", "")
 	t.Setenv("FF_PASSWORD_CMD", "exit 1")

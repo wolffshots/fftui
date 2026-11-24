@@ -180,6 +180,14 @@ with a secret manager such as the 1Password CLI:
 FF_PASSWORD_CMD=op read op://Personal/FutureForex/password
 ```
 
+The command runs in `sh -c` on macOS and Linux and in `cmd.exe` on Windows.
+Quote an argument that contains a space with double quotes. `cmd.exe` ignores
+single quotes, so the line below works on every platform:
+
+```
+FF_PASSWORD_CMD=op read "op://Personal/Future Forex/password"
+```
+
 ### Live-source environment variables
 
 | Var | Default | Purpose |

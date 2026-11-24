@@ -4,7 +4,6 @@ import (
 	"bufio"
 	"fmt"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"runtime"
 	"strings"
@@ -108,8 +107,10 @@ const configTemplate = `# fftui user config. KEY=VALUE, read literally (no $ exp
 
 # Instead of storing the password in plaintext, fetch it from a command. Runs
 # only when FF_PASSWORD is unset; trailing whitespace is trimmed. Example uses
-# the 1Password CLI:
+# the 1Password CLI. Quote an argument with double quotes, not single quotes:
+# Windows runs the command in cmd.exe, which ignores single quotes.
 # FF_PASSWORD_CMD=op read op://Personal/FutureForex/password
+# FF_PASSWORD_CMD=op read "op://Personal/Future Forex/password"
 
 # Optional — auto-detected from your account after login. Set it only to skip
 # that lookup, or if your account has more than one client.
@@ -181,7 +182,9 @@ func initConfig(path string) (wrote bool, err error) {
 // resolvePasswordCmd sets FF_PASSWORD from FF_PASSWORD_CMD when the password is
 // unset/empty and a command is configured. The command is a shell one-liner
 // (e.g. `op read op://Personal/FutureForex/password`) run via `sh -c` on Unix
-// or `cmd /C` on Windows; its stdout is used verbatim minus trailing whitespace.
+// or `cmd /C` on Windows (see shellCommand); its stdout is used verbatim minus
+// trailing whitespace. Double quotes work in both shells; single quotes do not
+// work in cmd.exe.
 // A no-op returns nil; a command failure returns an error including its stderr.
 func resolvePasswordCmd() error {
 	if os.Getenv("FF_PASSWORD") != "" {
@@ -191,12 +194,7 @@ func resolvePasswordCmd() error {
 	if cmdStr == "" {
 		return nil
 	}
-	var cmd *exec.Cmd
-	if runtime.GOOS == "windows" {
-		cmd = exec.Command("cmd", "/C", cmdStr)
-	} else {
-		cmd = exec.Command("sh", "-c", cmdStr)
-	}
+	cmd := shellCommand(cmdStr)
 	var stderr strings.Builder
 	cmd.Stderr = &stderr
 	out, err := cmd.Output()
